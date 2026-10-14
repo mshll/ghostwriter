@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. Do not paste private text that you wrote: describe it, or use a short sample that you can share.
+  - type: checkboxes
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the existing issues and read the [FAQ](https://github.com/mshll/ghostwriter#faq).
+          required: true
+        - label: I use the latest version of Ghostwriter.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open TextEdit and type "Thanks for the"
+        2. Press Tab
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: App you typed in
+      description: The app and its version, for example "Slack 4.47" or "Safari 26, on github.com".
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Settings > About Ghostwriter > Diagnostics copies your Mac, macOS, model and settings. It never includes text that you wrote.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots or screen recording
+      description: Optional. Check that they show no private text.

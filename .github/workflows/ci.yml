@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # Xcode 27 is only on this image while it is in preview; switch to macos-27 once that label exists.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/cache@v6
+        with:
+          path: Packages/GhostwriterKit/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('Packages/GhostwriterKit/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Test the package
+        run: swift test --package-path Packages/GhostwriterKit
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build the app
+        run: |
+          xcodegen generate
+          xcodebuild -project Ghostwriter.xcodeproj -scheme Ghostwriter -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' CODE_SIGNING_ALLOWED=NO build

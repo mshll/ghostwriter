@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#FAFAFB"/>
+      <stop offset="1" stop-color="#ECECEF"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="400" fill="url(#bg)"/>
+  <rect x="262" y="170" width="4" height="40" rx="2" fill="#0A84FF"/><circle cx="284" cy="190" r="3" fill="#A9A9B0" opacity=".85"/><circle cx="297" cy="190" r="3" fill="#A9A9B0" opacity=".79"/><circle cx="310" cy="190" r="3" fill="#A9A9B0" opacity=".73"/><circle cx="323" cy="190" r="3" fill="#A9A9B0" opacity=".67"/><circle cx="336" cy="190" r="3" fill="#A9A9B0" opacity=".60"/><circle cx="349" cy="190" r="3" fill="#A9A9B0" opacity=".54"/><circle cx="362" cy="190" r="3" fill="#A9A9B0" opacity=".48"/><circle cx="375" cy="190" r="3" fill="#A9A9B0" opacity=".42"/><path d="M378 180 l10 10 l-10 10" fill="none" stroke="#A9A9B0" stroke-opacity="0.5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="320" y="336" text-anchor="middle" font-family="SF Pro Text" font-weight="500" font-size="13" fill="#9A9AA1" letter-spacing="0.2">Drag Ghostwriter to Applications</text>
+</svg>
