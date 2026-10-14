@@ -1,0 +1,11 @@
+.DS_Store
+build/
+DerivedData/
+.build/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+*.gguf
+Ghostwriter.xcodeproj/
+eval/data/
+__pycache__/
