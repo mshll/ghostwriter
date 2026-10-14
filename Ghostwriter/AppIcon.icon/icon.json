@@ -1,0 +1,37 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.06275,0.06667,0.07843,1.00000",
+          "srgb:0.06275,0.06667,0.07843,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "Mascot",
+      "layers": [
+        {
+          "name": "mascot",
+          "glass": false,
+          "image-name": "mascot.png"
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
