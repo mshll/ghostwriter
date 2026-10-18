@@ -4,12 +4,12 @@
         <title>Ghostwriter</title>
         <item>
             <title>1.0.0</title>
-            <pubDate>Thu, 15 Oct 2026 10:20:06 +0300</pubDate>
-            <sparkle:version>202610150716</sparkle:version>
+            <pubDate>Sun, 18 Oct 2026 19:04:52 +0300</pubDate>
+            <sparkle:version>202610181601</sparkle:version>
             <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <sparkle:releaseNotesLink>https://mshll.github.io/ghostwriter/Ghostwriter-1.0.0.md</sparkle:releaseNotesLink>
-            <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter-1.0.0.dmg" length="15573516" type="application/octet-stream" sparkle:edSignature="JbixOLbkiYgtE+zyHHwgfEKHCzrlvUzW6h23ReQ1Eh15pfASoPdw1Wqst9TO3hfGeQ5qtA88S6nZBoM22mpSCA=="/>
+            <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter-1.0.0.dmg" length="15574984" type="application/octet-stream" sparkle:edSignature="gn1ZGKIWIdr8FGh+MHOefzmcP+OW0CzXk4Wz8uMA5iTk0iKlzY0b+09KRGpcn8/6THny65IdK0zqbsCoAnLQCg=="/>
         </item>
     </channel>
 </rss>
