@@ -180,6 +180,7 @@ final class OnboardingWindow: NSPanel {
         hasShadow = false
         animationBehavior = .none
         isReleasedWhenClosed = false
+        autorecalculatesKeyViewLoop = true
         setFrame(frame, display: false)
     }
 
