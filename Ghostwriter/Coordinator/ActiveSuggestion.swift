@@ -15,6 +15,7 @@ struct ActiveSuggestion: Equatable {
     var candidates: [String]
     var kind: Kind
     var isDrawn = false
+    var isPartlyAccepted = false
 
     var text: String { candidates.first ?? "" }
 
@@ -35,13 +36,20 @@ struct ActiveSuggestion: Equatable {
             return String(candidate.dropFirst(typed.count))
         }
         guard !remaining.isEmpty else { return nil }
-        return ActiveSuggestion(fieldID: fieldID, anchor: textBefore, candidates: remaining, kind: kind, isDrawn: isDrawn)
+        return ActiveSuggestion(
+            fieldID: fieldID, anchor: textBefore, candidates: remaining, kind: kind, isDrawn: isDrawn, isPartlyAccepted: isPartlyAccepted
+        )
     }
 
     func merged(with newer: ActiveSuggestion, settled: Bool) -> ActiveSuggestion {
         guard newer.anchor == anchor, newer.kind == kind else { return newer }
-        let candidates = ShownSuggestion.merge(shown: self.candidates, drawn: isDrawn, update: newer.candidates, settled: settled)
-        return ActiveSuggestion(fieldID: fieldID, anchor: anchor, candidates: candidates, kind: kind, isDrawn: isDrawn)
+        // Once the user accepts part of the shown text, the rest must not change under them.
+        let candidates = ShownSuggestion.merge(
+            shown: self.candidates, drawn: isDrawn, update: newer.candidates, settled: settled && !isPartlyAccepted
+        )
+        return ActiveSuggestion(
+            fieldID: fieldID, anchor: anchor, candidates: candidates, kind: kind, isDrawn: isDrawn, isPartlyAccepted: isPartlyAccepted
+        )
     }
 }
 
