@@ -840,6 +840,7 @@ final class CompletionCoordinator {
         noteUsed(current, in: snapshot)
         typedSinceRead += chunk
         suggestion = current.advanced(to: current.anchor + chunk)
+        suggestion?.isPartlyAccepted = true
         // The ghost stays up: the inserted word lands on its own ghost letters, and the field read that
         // follows redraws the rest at the new caret.
         if suggestion == nil {
