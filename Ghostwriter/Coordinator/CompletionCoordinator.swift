@@ -15,6 +15,7 @@ import os
 final class CompletionCoordinator {
     nonisolated private static let log = Logger.gw("Coordinator")
     private static let typingWindow: Duration = .milliseconds(1500)
+    private static let deletePause: Duration = .milliseconds(400)
     private static let autoSelectionDelay: Duration = .milliseconds(350)
     private static let briefPause: Duration = .seconds(4)
     private static let draftWords = 80
@@ -66,6 +67,7 @@ final class CompletionCoordinator {
     private var typedTail = ""
     private var typedSinceRead = ""
     private var editedSinceRead = false
+    private var deleteSettle: Task<Void, Never>?
     private var charactersSinceExamples = 0
     private var acceptWatchdog: Task<Void, Never>?
     private var followers: (language: String?, value: [String: [String: Double]])?
@@ -210,6 +212,7 @@ final class CompletionCoordinator {
         autoSelectionTask?.cancel()
         typoCheck?.cancel()
         clearAutoFixUndo()
+        endDeleting()
         if selectionActions.isPassive { selectionActions.dismiss() }
         hideAll()
         cancelGeneration()
@@ -277,7 +280,7 @@ final class CompletionCoordinator {
             detachSuggestions()
             return
         }
-        if showEmojiPickerIfNeeded(for: snapshot) || checkTyposIfNeeded(for: snapshot) {
+        if showEmojiPickerIfNeeded(for: snapshot) || deleteSettle != nil || checkTyposIfNeeded(for: snapshot) {
             cancelGeneration()
             return
         }
@@ -310,6 +313,7 @@ final class CompletionCoordinator {
         pointerMovedLast = false
         hideNotice()
         clearAutoFixUndo()
+        endDeleting()
         if selectionActions.isPassive {
             selectionActions.dismiss()
         }
@@ -333,6 +337,7 @@ final class CompletionCoordinator {
                 hidePicker()
             }
             scheduleRefresh()
+            settleAfterDeleting()
         case .returnKey, .tab:
             typedTail = ""
             editedSinceRead = true
@@ -371,8 +376,29 @@ final class CompletionCoordinator {
         }
     }
 
+    private func settleAfterDeleting() {
+        deleteSettle = Task { [weak self] in
+            do {
+                try await Task.sleep(for: Self.deletePause)
+            } catch {
+                return
+            }
+            guard let self else { return }
+            deleteSettle = nil
+            guard let field, emoji == nil else { return }
+            refreshExamplesIfNeeded(for: field)
+            requestCompletion(for: field)
+        }
+    }
+
+    private func endDeleting() {
+        deleteSettle?.cancel()
+        deleteSettle = nil
+    }
+
     private func pointerMoved() {
         pointerMovedLast = true
+        endDeleting()
         guard field != nil else { return }
         typedTail = ""
         lastTyping = nil
