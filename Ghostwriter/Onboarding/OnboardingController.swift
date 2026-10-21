@@ -180,7 +180,6 @@ final class OnboardingWindow: NSPanel {
         hasShadow = false
         animationBehavior = .none
         isReleasedWhenClosed = false
-        // The hosting view sits inside a container, which hides SwiftUI's fields from the default key view loop.
         autorecalculatesKeyViewLoop = true
         setFrame(frame, display: false)
     }
