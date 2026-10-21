@@ -43,7 +43,6 @@ struct ActiveSuggestion: Equatable {
 
     func merged(with newer: ActiveSuggestion, settled: Bool) -> ActiveSuggestion {
         guard newer.anchor == anchor, newer.kind == kind else { return newer }
-        // Once the user accepts part of the shown text, the rest must not change under them.
         let candidates = ShownSuggestion.merge(
             shown: self.candidates, drawn: isDrawn, update: newer.candidates, settled: settled && !isPartlyAccepted
         )
