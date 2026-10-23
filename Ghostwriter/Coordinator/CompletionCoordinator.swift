@@ -313,7 +313,9 @@ final class CompletionCoordinator {
         pointerMovedLast = false
         hideNotice()
         clearAutoFixUndo()
-        endDeleting()
+        if event.kind != .other {
+            endDeleting()
+        }
         if selectionActions.isPassive {
             selectionActions.dismiss()
         }
