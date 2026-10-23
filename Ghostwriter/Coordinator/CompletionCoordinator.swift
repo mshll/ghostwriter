@@ -385,7 +385,11 @@ final class CompletionCoordinator {
             }
             guard let self else { return }
             deleteSettle = nil
-            guard let field, emoji == nil else { return }
+            guard let field else { return }
+            if showEmojiPickerIfNeeded(for: field) || checkTyposIfNeeded(for: field) {
+                cancelGeneration()
+                return
+            }
             refreshExamplesIfNeeded(for: field)
             requestCompletion(for: field)
         }
