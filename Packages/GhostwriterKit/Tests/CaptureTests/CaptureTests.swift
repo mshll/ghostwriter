@@ -204,3 +204,30 @@ import Testing
         }
     }
 }
+
+@Suite struct EmptyLineCaretTests {
+    private let field = CGRect(x: 408, y: 832, width: 710, height: 76)
+
+    @Test func lineBoxBecomesCaretAtLineStart() {
+        let box = CGRect(x: 412, y: 881, width: 702, height: 23)
+        #expect(CaretLocator.emptyLineCaret(box, in: field, rightToLeft: false) == CGRect(x: 412, y: 881, width: 1, height: 23))
+    }
+
+    @Test func rightToLeftCaretSitsAtLineEnd() {
+        let box = CGRect(x: 412, y: 881, width: 702, height: 23)
+        #expect(CaretLocator.emptyLineCaret(box, in: field, rightToLeft: true) == CGRect(x: 1114, y: 881, width: 1, height: 23))
+    }
+
+    @Test func boxOutsideTheFieldIsRejected() {
+        let window = CGRect(x: 30, y: 55, width: 1425, height: 939)
+        #expect(CaretLocator.emptyLineCaret(window, in: field, rightToLeft: false) == nil)
+    }
+
+    @Test func unknownFieldIsRejected() {
+        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 702, height: 23), in: nil, rightToLeft: false) == nil)
+    }
+
+    @Test func narrowRectIsLeftToTheCaretChecks() {
+        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 0, height: 17), in: field, rightToLeft: false) == nil)
+    }
+}

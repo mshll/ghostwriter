@@ -98,8 +98,13 @@ enum CaretLocator {
     private static func markerCaret(
         _ element: AXElement, at marker: AXTextMarker, frame: CGRect?, rightToLeft: Bool
     ) throws(AXFailure) -> Caret? {
-        if let rect = try markerBounds(element, from: marker, to: marker), isSane(rect, in: frame) {
-            return Caret(rect: line(at: rect.minX, rect), source: .textMarker)
+        if let rect = try markerBounds(element, from: marker, to: marker) {
+            if isSane(rect, in: frame) {
+                return Caret(rect: line(at: rect.minX, rect), source: .textMarker)
+            }
+            if let caret = emptyLineCaret(rect, in: frame, rightToLeft: rightToLeft) {
+                return Caret(rect: caret, source: .textMarker)
+            }
         }
         guard let previous = AXDecode.marker(try element.parameterized(
                   kAXPreviousTextMarkerForTextMarkerParameterizedAttribute, marker
@@ -107,6 +112,14 @@ enum CaretLocator {
               let rect = try markerBounds(element, from: previous, to: marker), isSane(rect, in: frame)
         else { return nil }
         return Caret(rect: line(at: rightToLeft ? rect.minX : rect.maxX, rect), source: .textMarker)
+    }
+
+    /// Chromium answers a collapsed range on an empty line with that line's box, which spans the field's width.
+    static func emptyLineCaret(_ rect: CGRect, in frame: CGRect?, rightToLeft: Bool) -> CGRect? {
+        guard let frame, rect.minX.isFinite, rect.minY.isFinite, rect.height > 0, rect.width > FieldReader.maxCaretWidth,
+              frame.insetBy(dx: -1, dy: -1).contains(rect)
+        else { return nil }
+        return line(at: rightToLeft ? rect.maxX : rect.minX, rect)
     }
 
     private static func estimate(_ frame: CGRect?, style: FieldStyle, rightToLeft: Bool) -> Caret {
