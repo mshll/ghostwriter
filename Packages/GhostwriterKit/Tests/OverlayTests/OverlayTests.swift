@@ -337,3 +337,16 @@ import Testing
         #expect(inset(scrolled) == 0)
     }
 }
+
+@MainActor @Suite struct OverlayWindowServerTests {
+    @Test func panelIsOnScreenOnlyWhileOrderedIn() async throws {
+        let panel = OverlayPanel(acceptsMouse: false)
+        panel.setFrame(CGRect(x: 100, y: 100, width: 40, height: 20), display: false)
+        panel.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(GhostOverlay.isOnScreen(panel))
+        panel.orderOut(nil)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!GhostOverlay.isOnScreen(panel))
+    }
+}

@@ -1,10 +1,12 @@
 import AppKit
 import GWCore
 import QuartzCore
+import os
 
 /// Geometry in and out is in global top-left screen coordinates, like AX.
 @MainActor
 public final class GhostOverlay {
+    private static let log = Logger.gw("Overlay")
     public var appearance = OverlayAppearance()
 
     private var ghostPanel: OverlayPanel?
@@ -60,7 +62,7 @@ public final class GhostOverlay {
             return false
         }
         typoPanel?.orderOut(nil)
-        let panel = ghostPanel ?? makeGhostPanel()
+        let panel = Self.usable(ghostPanel) ?? makeGhostPanel()
         let frame = placement.frame.flippedVertically(primaryScreenHeight: primaryHeight)
         if panel.frame != frame {
             panel.setFrame(frame, display: false)
@@ -100,7 +102,7 @@ public final class GhostOverlay {
         )
         lastShown = nil
         ghostPanel?.orderOut(nil)
-        let panel = typoPanel ?? makeTypoPanel()
+        let panel = Self.usable(typoPanel) ?? makeTypoPanel()
         panel.setFrame(placement.frame.flippedVertically(primaryScreenHeight: primaryHeight), display: false)
         typoView.frame = panel.contentView?.bounds ?? .zero
         typoView.update(word: placement.word, chip: placement.chip, correction: label)
@@ -120,7 +122,7 @@ public final class GhostOverlay {
         }
         statusView.configure(text: text, detail: detail, busy: busy)
         let frame = MarkLayout.status(size: statusView.preferredSize, caret: caret, screen: screen)
-        let panel = statusPanel ?? makeStatusPanel()
+        let panel = Self.usable(statusPanel) ?? makeStatusPanel()
         panel.setFrame(frame.flippedVertically(primaryScreenHeight: primaryHeight), display: true)
         statusView.frame = panel.contentView?.bounds ?? .zero
         if !panel.isVisible {
@@ -154,7 +156,7 @@ public final class GhostOverlay {
             screen: screen,
             titleInset: PickerListView.titleInset
         )
-        let panel = pickerPanel ?? makePickerPanel()
+        let panel = Self.usable(pickerPanel) ?? makePickerPanel()
         panel.setFrame(frame.flippedVertically(primaryScreenHeight: primaryHeight), display: true)
         pickerView.frame = panel.contentView?.bounds ?? .zero
         panel.invalidateShadow()
@@ -172,6 +174,25 @@ public final class GhostOverlay {
         guard let pickerPanel, pickerPanel.isVisible else { return }
         pickerPanel.contentView?.layer?.removeAnimation(forKey: Self.fadeKey)
         pickerPanel.orderOut(nil)
+    }
+
+    /// AppKit can keep a panel as visible after the window server has ordered it out, and then never orders it in
+    /// again: such a panel is closed so that the caller makes a new one.
+    private static func usable(_ panel: OverlayPanel?) -> OverlayPanel? {
+        guard let panel else { return nil }
+        guard panel.isVisible, !isOnScreen(panel) else { return panel }
+        log.error("Replacing an overlay panel that the window server does not show")
+        panel.close()
+        return nil
+    }
+
+    static func isOnScreen(_ window: NSWindow) -> Bool {
+        // The window server reads the IDs as the array's raw values: an array of numbers matches no window.
+        var id = UnsafeRawPointer(bitPattern: UInt(window.windowNumber))
+        guard let ids = CFArrayCreate(nil, &id, 1, nil),
+              let info = CGWindowListCreateDescriptionFromArray(ids) as? [[String: Any]]
+        else { return false }
+        return info.first?[kCGWindowIsOnscreen as String] as? Bool ?? false
     }
 
     /// Capture reports a zero rect when it found no caret; drawn as is, it lands at the screen's corner.
