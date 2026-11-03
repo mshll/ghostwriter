@@ -3,6 +3,18 @@
     <channel>
         <title>Ghostwriter</title>
         <item>
+            <title>1.0.1</title>
+            <pubDate>Tue, 03 Nov 2026 15:14:24 +0300</pubDate>
+            <sparkle:version>202611031209</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://mshll.github.io/ghostwriter/Ghostwriter-1.0.1.md</sparkle:releaseNotesLink>
+            <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter-1.0.1.dmg" length="15577536" type="application/octet-stream" sparkle:edSignature="uPZXhD6jQCxeTIuXRaTJiuPQDENsHB9HFhg7dfY66O+0ibHydbeYNr7ZrfkPKESyTSOUvxUnoCe5PqkDgj6YDg=="/>
+            <sparkle:deltas>
+                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611031209-202610181601.delta" sparkle:deltaFrom="202610181601" length="625834" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="bURnpU6ET4ItMW86sC18Lwdjd1E6t7GmLO1CYQJcuIfZE40Exhvb649bxbR03Wvk8qJ7DiYBK9Ho+XBVtsQaAQ=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>1.0.0</title>
             <pubDate>Sun, 18 Oct 2026 19:04:52 +0300</pubDate>
             <sparkle:version>202610181601</sparkle:version>
