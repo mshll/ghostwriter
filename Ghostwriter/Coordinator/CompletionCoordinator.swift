@@ -369,6 +369,7 @@ final class CompletionCoordinator {
         case .returnKey, .tab:
             typedTail = ""
             editedSinceRead = true
+            hideSuggestion()
             scheduleRefresh()
         case .escape:
             proofreading?.cancel()
