@@ -137,7 +137,7 @@ func evaluateTypos(_ options: Options, set: URL) async throws {
             result.guesses = misspelling.guesses
             let prefix = String(before.dropLast(misspelling.distanceFromEnd + misspelling.word.count))
             let suffix = String(before.suffix(misspelling.distanceFromEnd))
-            let request = harness.request(for: Row(id: row.id, app: row.app, kind: row.field, before: prefix), before: prefix)
+            let request = try harness.request(for: Row(id: row.id, app: row.app, kind: row.field, before: prefix), before: prefix)
             let prompt = request.prompt
             let partial = request.partialWord
             let scores = Mutex<[String: Double]>([:])

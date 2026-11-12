@@ -33,7 +33,7 @@ func score(_ options: Options, set: URL) async throws {
     var results: [ScoreResult] = []
     let start = ContinuousClock.now
     for row in rows {
-        let request = harness.request(for: row, before: row.before)
+        let request = try harness.request(for: row, before: row.before)
         let score = try await harness.engine.score(prompt: request.prompt, continuation: request.partialWord + (row.truth ?? ""))
         guard score.characters > 0 else { continue }
         results.append(ScoreResult(
@@ -91,7 +91,7 @@ func simulateTyping(_ options: Options, set: URL) async throws {
     for row in rows {
         let target = Array(folded(row.truth ?? ""))
         await suggester.reset()
-        if interval != nil { await suggester.prewarm(for: row, before: String(row.before.dropLast())) }
+        if interval != nil { try await suggester.prewarm(for: row, before: String(row.before.dropLast())) }
         var result = TypingResult(
             id: row.id, lang: language(of: row), kind: row.kind, source: row.source,
             characters: target.count, keystrokes: 0, requests: 0, shown: 0, used: 0, milliseconds: [], late: interval.map { _ in 0 }
@@ -195,7 +195,7 @@ func simulateTyping(_ options: Options, set: URL) async throws {
 
 protocol Suggester {
     func reset() async
-    func prewarm(for row: Row, before: String) async
+    func prewarm(for row: Row, before: String) async throws
     func suggest(for row: Row, before: String) async throws -> [Candidate]
 }
 
@@ -206,8 +206,8 @@ struct LlamaSuggester: Suggester {
         await harness.engine.clearCache()
     }
 
-    func prewarm(for row: Row, before: String) async {
-        await harness.engine.prewarm(prompt: harness.request(for: row, before: before).prompt)
+    func prewarm(for row: Row, before: String) async throws {
+        await harness.engine.prewarm(prompt: try harness.request(for: row, before: before).prompt)
     }
 
     func suggest(for row: Row, before: String) async throws -> [Candidate] {

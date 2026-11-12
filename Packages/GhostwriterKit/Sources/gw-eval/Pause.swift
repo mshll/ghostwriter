@@ -149,7 +149,7 @@ private func pauseRow(_ row: Row, harness: Harness, interval: Double) async thro
         nextRead = read
         await runUntil(read)
         visibleDrawn = true
-        let subscription = engine.suggestions(for: harness.request(for: row, before: prefix + rawTail[..<typed].joined()))
+        let subscription = engine.suggestions(for: try harness.request(for: row, before: prefix + rawTail[..<typed].joined()))
         requests[subscription.id] = (typed, read)
         latest = subscription.id
     }
