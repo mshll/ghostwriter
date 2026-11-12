@@ -89,7 +89,8 @@ struct FieldReader {
         if SecretFieldHints.isCredentialAutofill(AXDecode.string(attributes[AXName.valueAutofillType])) {
             return rejected(.secureField)
         }
-        let isEditableWeb = attributes[kAXEditableAncestorAttribute] != nil
+        let editsWholeDocument = try isEditableDocument(element, role: role)
+        let isEditableWeb = attributes[kAXEditableAncestorAttribute] != nil || editsWholeDocument
         guard Self.textRoles.contains(role) || isEditableWeb else { return rejected(.notTextInput) }
         let label = try label(attributes)
         let labels = [kAXPlaceholderValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute]
@@ -149,6 +150,12 @@ struct FieldReader {
             isAgentComposer: isAgentComposer
         ))
         return context
+    }
+
+    /// A focused web area is the field when the whole document is editable, as in a Mail compose body. WebKit leaves
+    /// `AXEditableAncestor` off the web area itself and marks it editable by making its value settable.
+    private func isEditableDocument(_ element: AXElement, role: String) throws(AXFailure) -> Bool {
+        role == AXName.webAreaRole ? try element.isSettable(kAXValueAttribute) : false
     }
 
     private func label(_ attributes: [String: CFTypeRef]) throws(AXFailure) -> String? {

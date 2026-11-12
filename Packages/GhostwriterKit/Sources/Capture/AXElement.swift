@@ -65,6 +65,12 @@ struct AXElement: @unchecked Sendable, Hashable {
         return try Self.check(error) ? value : nil
     }
 
+    func isSettable(_ attribute: String) throws(AXFailure) -> Bool {
+        var settable: DarwinBoolean = false
+        let error = AXUIElementIsAttributeSettable(ref, attribute as CFString, &settable)
+        return try Self.check(error) && settable.boolValue
+    }
+
     @discardableResult
     func set(_ attribute: String, _ value: CFTypeRef) -> AXError {
         AXUIElementSetAttributeValue(ref, attribute as CFString, value)
