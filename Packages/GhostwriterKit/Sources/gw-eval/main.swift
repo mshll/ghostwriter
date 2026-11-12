@@ -89,7 +89,7 @@ struct Harness {
         let after = row.after ?? ""
         let built = builder.build(PromptContext(
             appName: row.app ?? "TextEdit", fieldKind: FieldKind(rawValue: row.kind ?? "") ?? .unknown, now: fixedNow,
-            screenText: screenText ?? (options.screen ? row.screen : nil), textBefore: before, textAfter: after, mode: options.draft ? .draft : .inline
+            screenText: screenText ?? (options.screen ? rowScreen(row) : nil), textBefore: before, textAfter: after, mode: options.draft ? .draft : .inline
         ))
         let prompt = options.promptVariant.apply(to: built.text, before: String(before.dropLast(built.partialWord.count)))
         return CompletionRequest(
@@ -97,6 +97,11 @@ struct Harness {
             maxWords: options.maxWords, mode: options.draft ? .draft : .inline, beams: options.beams, topK: options.topK,
             tuning: options.tuning, stopStrings: options.stopStrings ? BuiltPrompt.stopStrings : []
         )
+    }
+
+    func rowScreen(_ row: Row) -> String? {
+        guard options.reverseScreen else { return row.screen }
+        return row.screen.map { $0.split(separator: "\n", omittingEmptySubsequences: false).reversed().joined(separator: "\n") }
     }
 
     func firstShown(_ request: CompletionRequest) async throws -> (candidates: [Candidate], milliseconds: Double, stats: GenerationStats) {
