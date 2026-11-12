@@ -18,6 +18,7 @@ final class AppServices {
     let models: ModelLibrary
     let appRules: AppRuleLibrary
     let snippets: SnippetLibrary
+    let cotypist: CotypistImporter
     let updaterController: SPUStandardUpdaterController
     private let updateReminder: UpdateReminder
 
@@ -29,6 +30,7 @@ final class AppServices {
         models = ModelLibrary(preferences: preferences, appState: appState, downloader: downloader)
         appRules = AppRuleLibrary(store: memory)
         snippets = SnippetLibrary(store: memory)
+        cotypist = CotypistImporter(preferences: preferences, memory: memory, appRules: appRules)
         updateReminder = UpdateReminder(appState: appState)
         updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: updateReminder)
         if !WritingAssistant.isAvailable {

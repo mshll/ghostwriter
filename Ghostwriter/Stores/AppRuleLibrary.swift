@@ -73,6 +73,28 @@ final class AppRuleLibrary {
         update(bundleID, \.recordWriting, to: enabled)
     }
 
+    /// Adopts imported settings that turn something off, unless a built-in rule or the user already decides that
+    /// setting. Returns how many apps changed.
+    func importRules(_ imported: [AppRule]) -> Int {
+        let toggles: [WritableKeyPath<AppRule, Bool?>] = [
+            \.completionsEnabled, \.midLineEnabled, \.recordWriting, \.tabAcceptEnabled, \.typoFixesEnabled,
+        ]
+        var changed = 0
+        for incoming in imported {
+            let builtIn = BuiltInAppRules.rule(for: incoming.bundleID)
+            let existing = rulesByBundleID[incoming.bundleID] ?? AppRule(bundleID: incoming.bundleID)
+            var rule = existing
+            for toggle in toggles where incoming[keyPath: toggle] == false && rule[keyPath: toggle] == nil && builtIn?[keyPath: toggle] == nil {
+                rule[keyPath: toggle] = false
+            }
+            if rule.customInstructions == nil { rule.customInstructions = incoming.customInstructions }
+            guard rule != existing else { continue }
+            save(rule)
+            changed += 1
+        }
+        return changed
+    }
+
     private func update(_ bundleID: String, _ field: WritableKeyPath<AppRule, Bool?>, to enabled: Bool) {
         var rule = rulesByBundleID[bundleID] ?? AppRule(bundleID: bundleID)
         let fallback = BuiltInAppRules.rule(for: bundleID)?[keyPath: field] ?? true
