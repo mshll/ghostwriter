@@ -44,7 +44,7 @@ public struct PromptBuilder: Sendable {
         let environment = EnvironmentLines.make(for: context)
         let volatile = EnvironmentLines.volatile(for: context, language: language, timeZone: timeZone)
         let pickedExamples = Self.pack(examples, tokens: exampleTokens, separatorTokens: separatorTokens, budget: allocation[2], fitter: fitter)
-        let screenSection = fitter.fit(screen[...], budget: allocation[3], keep: .start)
+        let screenSection = fitter.fit(screen[...], budget: allocation[3], keep: .end)
         let clipboardSection = fitter.fit(clipboard[...], budget: allocation[4], keep: .start)
         let after = fitter.fit(afterSource[...], budget: allocation[1], keep: .start)
         let before = fitter.fit(Self.plainTrailingSpaces(typed.head).drop(while: \.isWhitespace), budget: allocation[0], keep: .end)
