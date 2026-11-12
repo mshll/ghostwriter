@@ -404,6 +404,7 @@ final class CompletionCoordinator {
 
     private func pointerMoved() {
         pointerMovedLast = true
+        clearAutoFixUndo()
         endDeleting()
         guard field != nil else { return }
         typedTail = ""
@@ -851,10 +852,16 @@ final class CompletionCoordinator {
         for key in registeredKeys.subtracting(wanted) {
             hotKeys.unregister(key)
         }
-        for (key, action) in bindings where !hotKeys.register(key, action: action) {
+        for (key, action) in bindings where !hotKeys.register(key, action: { [weak self] in self?.pressed(key, action) }) {
             Self.log.error("Registering hot key \(key.keyCode) failed")
         }
         registeredKeys = wanted
+    }
+
+    /// Registered keys never reach `handleKey`, so each press clears what any other key press clears there.
+    private func pressed(_ key: HotKey, _ action: () -> Void) {
+        if key != .deleteBackward { clearAutoFixUndo() }
+        action()
     }
 
     private func acceptWord() {
@@ -1157,13 +1164,25 @@ final class CompletionCoordinator {
     }
 
     private func undoAutoFix() {
-        guard let undo = autoFixUndo, let snapshot = field, snapshot.id == undo.field else { return }
+        guard let undo = autoFixUndo, let snapshot = field else { return }
         clearAutoFixUndo()
+        guard snapshot.id == undo.field,
+              undo.edit.canRevert(textBefore: snapshot.textBefore + typedSinceRead, selectedText: snapshot.selectedText)
+        else {
+            Self.log.info("Typo fix undo skipped: the text moved")
+            passDeleteBackward(to: snapshot.app.pid)
+            return
+        }
         hideAll()
         cancelGeneration()
         apply(undo.edit.reverted, in: snapshot)
         preferences.ignoreTypo(undo.word)
         showNotice("Kept \u{201C}\(undo.word)\u{201D}", in: snapshot)
+    }
+
+    private func passDeleteBackward(to pid: pid_t) {
+        enqueueInsertion { await TextInserter.deleteBackward(count: 1, in: pid) }
+        handleKey(KeyEvent(kind: .deleteBackward, keyCode: UInt16(HotKey.deleteBackward.keyCode), modifiers: 0, characters: ""))
     }
 
     private func clearAutoFixUndo() {
