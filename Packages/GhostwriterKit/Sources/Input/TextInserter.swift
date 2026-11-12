@@ -61,6 +61,10 @@ public enum TextInserter {
         postKeyPress(keyCode: kVK_Tab, flags: [], to: pid)
     }
 
+    public static func post(_ hotKey: HotKey, to pid: pid_t) {
+        postKeyPress(keyCode: Int(hotKey.keyCode), flags: CGEventFlags(rawValue: UInt64(hotKey.modifierFlags.rawValue)), to: pid)
+    }
+
     static func chunks(of text: String, limit: Int) -> [String] {
         let limit = max(limit, 1)
         var result: [String] = []

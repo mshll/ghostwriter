@@ -81,6 +81,7 @@ final class CompletionCoordinator {
     private var typoCheck: Task<Void, Never>?
     private var autoFixUndo: (field: FieldID, edit: Proofread, word: String, expiry: Task<Void, Never>)?
     private var lastProofreadPrewarm: ContinuousClock.Instant?
+    private var workspaceObserver: (any NSObjectProtocol)?
 
     init(preferences: Preferences, appState: AppState, services: AppServices, selectionActions: SelectionActionsController) {
         self.preferences = preferences
@@ -108,6 +109,7 @@ final class CompletionCoordinator {
         listenForShortcuts()
         followFeatureShortcuts()
         followPracticeField()
+        followActiveApp()
         startMonitorsWhenTrusted()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.startMonitorsWhenTrusted() }
@@ -121,6 +123,8 @@ final class CompletionCoordinator {
         tracker.stop()
         permissionTimer?.invalidate()
         shortcutTasks.forEach { $0.cancel() }
+        if let workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver) }
+        workspaceObserver = nil
     }
 
     // MARK: Monitors and shortcuts
@@ -150,6 +154,28 @@ final class CompletionCoordinator {
         } onChange: { [weak self] in
             Task { @MainActor in self?.followPracticeField() }
         }
+    }
+
+    private func followActiveApp() {
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let pid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+            MainActor.assumeIsolated { self?.appActivated(pid) }
+        }
+    }
+
+    private func appActivated(_ pid: pid_t?) {
+        guard let field, pid != field.app.pid else { return }
+        fieldAppLeft()
+    }
+
+    /// The field keeps its focus while another app is in front, but keys pressed now go to that app.
+    private func fieldAppLeft() {
+        clearAutoFixUndo()
+        endDeleting()
+        hideAll()
+        cancelGeneration()
     }
 
     private func startMonitorsWhenTrusted() {
@@ -859,7 +885,13 @@ final class CompletionCoordinator {
     }
 
     /// Registered keys never reach `handleKey`, so each press clears what any other key press clears there.
+    /// Hot keys fire in whichever app is in front: a press there acts on the field only if that app owns it.
     private func pressed(_ key: HotKey, _ action: () -> Void) {
+        if let front = NSWorkspace.shared.frontmostApplication?.processIdentifier, let field, front != field.app.pid {
+            fieldAppLeft()
+            TextInserter.post(key, to: front)
+            return
+        }
         if key != .deleteBackward { clearAutoFixUndo() }
         action()
     }
