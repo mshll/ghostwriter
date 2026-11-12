@@ -89,6 +89,33 @@ public final class MemoryStore: Sendable {
         if purgeDue { try purge(now: now) }
     }
 
+    /// Adds sessions whose keys are new and leaves existing ones untouched. Returns how many were added.
+    @discardableResult
+    public func importSessions(_ sessions: [WritingSession]) throws -> Int {
+        let added = try writer.write { db in
+            var added = 0
+            for session in sessions {
+                try db.execute(
+                    sql: """
+                        INSERT INTO writing_sessions
+                            (key, bundleID, domain, fieldLabel, text, bigrams, language, updatedAt, createdAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(key) DO NOTHING
+                        """,
+                    arguments: [
+                        session.key, session.bundleID, session.domain, session.fieldLabel, session.text,
+                        Words.indexedBigrams(in: session.text), session.language, session.updatedAt, session.updatedAt,
+                    ]
+                )
+                added += db.changesCount
+            }
+            return added
+        }
+        state.withLock { $0.writingChanged() }
+        try purge(now: .now)
+        return added
+    }
+
     /// Deletes the writing, then rebuilds the full-text index, compacts the file and empties the
     /// write-ahead log, so no erased words remain in the database files.
     public func eraseWriting(bundleID: String?) throws {

@@ -73,6 +73,22 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
         try MemoryStore(url: url).upsertSession(session("a", topics[0]))
         #expect(try MemoryStore(url: url).writingCount(bundleID: nil) == 1)
     }
+
+    @Test func importAddsNewSessionsAndKeepsExistingOnes() throws {
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("a", topics[0]))
+        let added = try store.importSessions([session("a", topics[1]), session("b", topics[2])])
+        #expect(added == 1)
+        #expect(try store.writingCount(bundleID: nil) == 2)
+        let found = try store.examples(query: "espresso grinder", bundleID: "com.apple.mail", language: nil, limit: 3, excludingKey: nil)
+        #expect(!found.contains(topics[1]))
+    }
+
+    @Test func importAppliesRetention() throws {
+        let store = try MemoryStore.inMemory()
+        #expect(try store.importSessions([session("old", topics[0], age: 120 * day)]) == 1)
+        #expect(try store.writingCount(bundleID: nil) == 0)
+    }
 }
 
 @Suite struct Retention {

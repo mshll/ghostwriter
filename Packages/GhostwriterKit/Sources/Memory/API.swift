@@ -2,6 +2,8 @@ import Foundation
 import GWCore
 
 public struct WritingSession: Sendable, Hashable {
+    public static let minimumCharacters = 100
+
     public var key: String
     public var bundleID: String
     public var domain: String?
