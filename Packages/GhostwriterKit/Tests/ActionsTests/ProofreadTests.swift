@@ -35,6 +35,30 @@ import Testing
     }
 }
 
+@Suite struct ProofreadUndo {
+    private let fix = Proofread(original: "I saw teh", corrected: "I saw the")
+
+    @Test func revertsWhileTheCorrectionEndsTheText() {
+        #expect(fix.canRevert(textBefore: "Yesterday I saw the", selectedText: ""))
+    }
+
+    @Test func refusesAfterTextFollowsTheCorrection() {
+        #expect(!fix.canRevert(textBefore: "Yesterday I saw the cat", selectedText: ""))
+    }
+
+    @Test func refusesAfterTheCaretMovedElsewhere() {
+        #expect(!fix.canRevert(textBefore: "Yesterday", selectedText: ""))
+    }
+
+    @Test func refusesWhileTextIsSelected() {
+        #expect(!fix.canRevert(textBefore: "Yesterday I saw the", selectedText: "the"))
+    }
+
+    @Test func refusesWhenAMarkJoinsTheLastLetter() {
+        #expect(!fix.canRevert(textBefore: "Yesterday I saw the\u{301}", selectedText: ""))
+    }
+}
+
 @Suite struct ProofreadChanges {
     @Test func pairsReplacedWords() {
         let changes = Proofread(original: "I recieve teh mail today", corrected: "I receive the mail today").changes
