@@ -56,8 +56,8 @@ let englishParagraph = """
     }
 
     @Test func emptySectionsAreOmittedWithTheirLabels() {
-        let text = makeBuilder().build(PromptContext(appName: "Notes", textBefore: "Hello there ")).text
-        #expect(text == PromptText.preamble + "I am typing in Notes.\n\n" + PromptText.typingLabel + "Hello there ")
+        let text = makeBuilder().build(PromptContext(appName: "Notes", textBefore: "Hi there ")).text
+        #expect(text == PromptText.preamble + "I am typing in Notes.\n\n" + PromptText.typingLabel + "Hi there ")
     }
 
     @Test func identicalInputsGiveIdenticalBytes() {
@@ -437,6 +437,33 @@ let englishParagraph = """
 
     @Test func englishProseIsDetected() {
         #expect(LanguageDetector.dominantLanguage(of: englishParagraph) == "en")
+    }
+
+    @Test func shortTextInAnExpectedLanguageIsDetected() {
+        #expect(LanguageDetector.dominantLanguage(of: "kk see you at the gym", expected: ["en", "ar"]) == "en")
+        #expect(LanguageDetector.dominantLanguage(of: "مشكور ما قصرت", expected: ["en", "ar"]) == "ar")
+        #expect(LanguageDetector.dominantLanguage(of: "see you", expected: ["en"]) == nil)
+    }
+
+    @Test func anUnexpectedLanguageNeedsMoreTextAndAConfidentRead() {
+        #expect(LanguageDetector.dominantLanguage(of: "lol ok np see ya tmrw then man", expected: ["en"]) == nil)
+        #expect(LanguageDetector.dominantLanguage(of: "danke schön, bis bald", expected: ["en"]) == nil)
+        #expect(LanguageDetector.dominantLanguage(of: "danke schön, bis bald", expected: ["de"]) == "de")
+        let german = "Vielen Dank für deine Nachricht, ich habe mich sehr darüber gefreut"
+        #expect(LanguageDetector.dominantLanguage(of: german, expected: ["en", "ar"]) == "de")
+    }
+
+    @Test func expectedLanguagesArePreferredAndRecentOnes() {
+        let expected = LanguageDetector.expectedLanguages(preferred: ["en-US", "ar-US", "zh-Hans-CN"], recent: ["fr"])
+        #expect(expected == ["en", "ar", "zh", "fr"])
+    }
+
+    @Test func recentLanguagesKeepTheLatestFew() {
+        var recent: [String] = []
+        for language in ["de", "fr", "es", "de", "it"] {
+            recent = LanguageDetector.remembering(language, in: recent)
+        }
+        #expect(recent == ["it", "de", "es"])
     }
 
     @Test func languageNamesAreEnglish() {

@@ -37,7 +37,7 @@ struct ContextRequest {
         self.sessionKey = sessionKey
         screenOptions = ScreenContextOptions()
         screenOptions.allowOCR = allowOCR
-        screenOptions.language = LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(600)))
+        screenOptions.language = LanguageDetector.language(ofTextBefore: snapshot.textBefore)
             ?? snapshot.language
     }
 
@@ -64,7 +64,7 @@ struct ContextRequest {
     static func examples(for snapshot: FieldSnapshot, limit: Int, excluding sessionKey: String?, memory: MemoryStore?) async -> [String] {
         guard let memory, limit > 0 else { return [] }
         let query = String(snapshot.textBefore.suffix(600))
-        let language = LanguageDetector.dominantLanguage(of: query)
+        let language = LanguageDetector.language(ofTextBefore: snapshot.textBefore)
         let bundleID = snapshot.app.bundleID
         return await Task.detached {
             do {

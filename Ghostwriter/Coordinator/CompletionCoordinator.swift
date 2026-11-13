@@ -1062,7 +1062,7 @@ final class CompletionCoordinator {
         guard rule.typoFixesEnabled != false, (rule.typoFixesEnabled ?? preferences.typoFixesEnabled) || preferences.suppressOnTypo,
               snapshot.selectedText.isEmpty, snapshot.kind != .code, snapshot.kind != .terminal,
               SpellCheck.finishesWord(snapshot.textBefore), !InputSource.isInputMethodActive else { return false }
-        let language = LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(400)))
+        let language = LanguageDetector.language(ofTextBefore: snapshot.textBefore)
         let found = preferences.sentenceTypoCheck && SpellCheck.endsSentence(snapshot.textBefore)
             ? SpellCheck.sentence(endingAt: snapshot.textBefore, language: language)
             : SpellCheck.lastWord(in: snapshot.textBefore, language: language).map { [$0] } ?? []
