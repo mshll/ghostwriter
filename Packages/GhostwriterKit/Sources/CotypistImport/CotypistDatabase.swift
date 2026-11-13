@@ -44,17 +44,16 @@ enum CotypistDatabase {
                 """
         )
         return rows.compactMap { row in
-            let text = [row["textUpToCursor"], row["selectedText"], row["textAfterCursor"]]
-                .compactMap { $0 as String? }
-                .joined()
-            guard text.count >= WritingSession.minimumCharacters, let updatedAt = row["updatedAt"] as Date? else {
-                return nil
-            }
-            let app = decode(AppProperties.self, from: row["appProperties"])
-            let field = decode(FieldProperties.self, from: row["textFieldProperties"])
+            let text = ["textUpToCursor", "selectedText", "textAfterCursor"].compactMap { string(row, $0) }.joined()
+            guard text.count >= WritingSession.minimumCharacters,
+                  let id = string(row, "id"), let bundleID = string(row, "appBundleIdentifier"),
+                  let updatedAt = Date.fromDatabaseValue(row["updatedAt"] as DatabaseValue)
+            else { return nil }
+            let app = decode(AppProperties.self, from: string(row, "appProperties"))
+            let field = decode(FieldProperties.self, from: string(row, "textFieldProperties"))
             return WritingSession(
-                key: "cotypist:\(row["id"] as String)",
-                bundleID: row["appBundleIdentifier"],
+                key: "cotypist:\(id)",
+                bundleID: bundleID,
                 domain: app?.url.flatMap(URL.init(string:))?.host(),
                 fieldLabel: field?.label,
                 text: text,
@@ -68,11 +67,17 @@ enum CotypistDatabase {
         let prefix = "app:"
         let rows = try Row.fetchAll(db, sql: "SELECT id, overrides FROM app_overrides WHERE id LIKE 'app:%'")
         return rows.compactMap { row in
-            let id: String = row["id"]
-            guard let overrides = decode(Overrides.self, from: row["overrides"]) else { return nil }
+            guard let id = string(row, "id"), let overrides = decode(Overrides.self, from: string(row, "overrides")) else {
+                return nil
+            }
             let rule = overrides.rule(bundleID: String(id.dropFirst(prefix.count)))
             return rule == AppRule(bundleID: rule.bundleID) ? nil : rule
         }
+    }
+
+    /// Nil for NULL and for values of another type, which the typed `Row` subscripts would trap on.
+    private static func string(_ row: Row, _ column: String) -> String? {
+        String.fromDatabaseValue(row[column] as DatabaseValue)
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, from json: String?) -> T? {

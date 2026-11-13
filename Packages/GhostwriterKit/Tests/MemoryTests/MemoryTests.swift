@@ -84,10 +84,19 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
         #expect(!found.contains(topics[1]))
     }
 
-    @Test func importAppliesRetention() throws {
+    @Test func importSkipsSessionsPastTheMaximumAge() throws {
         let store = try MemoryStore.inMemory()
-        #expect(try store.importSessions([session("old", topics[0], age: 120 * day)]) == 1)
+        #expect(try store.importSessions([session("old", topics[0], age: 120 * day)]) == 0)
         #expect(try store.writingCount(bundleID: nil) == 0)
+    }
+
+    @Test func importCountsOnlySessionsThatSurviveTheCap() throws {
+        let store = try MemoryStore.inMemory(retention: MemoryStore.Retention(maxSessions: 2))
+        try store.upsertSession(session("mine-1", topics[0]))
+        try store.upsertSession(session("mine-2", topics[1]))
+        let added = try store.importSessions([session("old", topics[2], age: day), session("older", topics[3], age: 2 * day)])
+        #expect(added == 0)
+        #expect(try store.writingCount(bundleID: nil) == 2)
     }
 }
 

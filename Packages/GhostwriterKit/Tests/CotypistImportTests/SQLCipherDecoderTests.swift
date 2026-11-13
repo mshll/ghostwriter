@@ -79,6 +79,13 @@ private func asPlainOutput(_ pages: [[UInt8]]) -> Data {
         }
     }
 
+    @Test func readsPagesLeftEmptyByIncrementalVacuumAsZeros() throws {
+        let zero = [UInt8](repeating: 0, count: pageSize)
+        let file = Data(encrypt(pages[0], number: 1) + zero + encrypt(pages[2], number: 3))
+        let plain = try SQLCipherDecoder.decrypt(database: file, wal: nil, passphrase: passphrase)
+        #expect(plain == asPlainOutput([pages[0], zero, pages[2]]))
+    }
+
     @Test func rejectsATruncatedFile() {
         #expect(throws: SQLCipherDecoder.Failure.malformed) {
             try SQLCipherDecoder.decrypt(database: database.prefix(pageSize + 10), wal: nil, passphrase: passphrase)

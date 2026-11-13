@@ -50,10 +50,12 @@ struct SQLCipherDecoder {
         return Data(plain)
     }
 
-    /// Returns nil when the page fails authentication.
+    /// Returns nil when the page fails authentication. An all-zero page is one that incremental vacuum
+    /// left unwritten, which SQLCipher also reads as zeros.
     func decryptPage(_ page: ArraySlice<UInt8>, number: Int) throws(Failure) -> [UInt8]? {
         let page = Array(page)
         guard page.count == Self.pageSize, number > 0 else { throw .malformed }
+        if number > 1, page.allSatisfy({ $0 == 0 }) { return page }
         let offset = number == 1 ? Self.saltSize : 0
         let ivStart = Self.pageSize - Self.reserveSize
         let hmacStart = Self.pageSize - Self.hmacSize

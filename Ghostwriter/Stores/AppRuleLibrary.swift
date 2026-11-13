@@ -90,7 +90,7 @@ final class AppRuleLibrary {
             if rule.customInstructions == nil { rule.customInstructions = incoming.customInstructions }
             guard rule != existing else { continue }
             save(rule)
-            changed += 1
+            if lastError == nil { changed += 1 }
         }
         return changed
     }

@@ -86,6 +86,14 @@ private func insertOverride(_ db: Database, id: String, _ json: String) throws {
         #expect(try CotypistDatabase.read(plain: plain).sessions.map(\.key) == ["cotypist:long"])
     }
 
+    @Test func skipsRowsItCannotRead() throws {
+        let plain = try plainDatabase { db in
+            try insertInput(db, id: "bad-date", before: longText, updatedAt: "not a date")
+            try insertInput(db, id: "good", before: longText)
+        }
+        #expect(try CotypistDatabase.read(plain: plain).sessions.map(\.key) == ["cotypist:good"])
+    }
+
     @Test func fallsBackToTheFieldDescriptionForTheLabel() throws {
         let plain = try plainDatabase { db in
             try insertInput(db, id: "A1", field: #"{"description":"Message","placeholderValue":""}"#, before: longText)

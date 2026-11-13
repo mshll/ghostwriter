@@ -259,7 +259,16 @@ struct PersonalStep: View {
             }
             .buttonStyle(OnboardingButtonStyle())
         }
-        .onAppear(perform: services.cotypist.prefillInstructions)
+        .onAppear {
+            if importsCotypist { services.cotypist.prefillInstructions() }
+        }
+        .onChange(of: importsCotypist) { _, imports in
+            if imports {
+                services.cotypist.prefillInstructions()
+            } else {
+                services.cotypist.clearPrefilledInstructions()
+            }
+        }
     }
 }
 

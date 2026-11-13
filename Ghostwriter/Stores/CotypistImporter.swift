@@ -1,3 +1,4 @@
+import Capture
 import CotypistImport
 import Foundation
 import GWCore
@@ -22,6 +23,7 @@ final class CotypistImporter {
     @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private let memory: MemoryStore?
     @ObservationIgnored private let appRules: AppRuleLibrary
+    @ObservationIgnored private var prefilled: String?
 
     init(source: Cotypist = .local, preferences: Preferences, memory: MemoryStore?, appRules: AppRuleLibrary) {
         self.source = source
@@ -34,6 +36,13 @@ final class CotypistImporter {
     func prefillInstructions() {
         guard preferences.customInstructions.isBlank, let instructions = source.instructions() else { return }
         preferences.customInstructions = instructions
+        prefilled = instructions
+    }
+
+    func clearPrefilledInstructions() {
+        guard let prefilled, preferences.customInstructions == prefilled else { return }
+        preferences.customInstructions = ""
+        self.prefilled = nil
     }
 
     func run() {
@@ -53,20 +62,30 @@ final class CotypistImporter {
         }
     }
 
+    /// Stores the writing first, so a failed save leaves settings and instructions untouched.
     private func apply(_ data: CotypistData) async throws -> String {
+        var texts = 0
+        let recording = preferences.recordWriting && memory != nil
+        if recording, let memory {
+            let switchedOff = Set(data.rules.filter { $0.recordWriting == false }.map(\.bundleID))
+            let sessions = data.sessions.filter { !switchedOff.contains($0.bundleID) && mayRecord($0) }
+            texts = try await Self.store(sessions, in: memory)
+        }
         let rules = appRules.importRules(data.rules)
         var instructions = false
         if let imported = data.instructions, preferences.customInstructions.isBlank {
             preferences.customInstructions = imported
             instructions = true
         }
-        guard preferences.recordWriting, let memory else {
-            return Self.summary(texts: 0, rules: rules, instructions: instructions, skippedWriting: !data.sessions.isEmpty)
-        }
-        let ownBundleID = Bundle.main.bundleIdentifier
-        let sessions = data.sessions.filter { $0.bundleID != ownBundleID && appRules.isRecordingAllowed(for: $0.bundleID) }
-        let texts = try await Self.store(sessions, in: memory)
-        return Self.summary(texts: texts, rules: rules, instructions: instructions, skippedWriting: false)
+        return Self.summary(texts: texts, rules: rules, instructions: instructions, skippedWriting: !recording && !data.sessions.isEmpty)
+    }
+
+    private func mayRecord(_ session: WritingSession) -> Bool {
+        guard session.bundleID != Bundle.main.bundleIdentifier, !BuiltInAppRules.isTerminal(session.bundleID),
+              !BuiltInAppRules.isCodeEditor(session.bundleID), appRules.isRecordingAllowed(for: session.bundleID)
+        else { return false }
+        guard let host = session.domain else { return true }
+        return BuiltInAppRules.domainRule(forHost: host)?.recordWriting != false
     }
 
     @concurrent private static func load(_ source: Cotypist) async throws(CotypistError) -> CotypistData {

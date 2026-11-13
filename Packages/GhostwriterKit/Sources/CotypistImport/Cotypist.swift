@@ -49,11 +49,24 @@ public struct Cotypist: Sendable {
     public func load() throws(CotypistError) -> CotypistData {
         guard isInstalled else { throw .notFound }
         let passphrase = try databaseKey()
+        do {
+            return try read(passphrase: passphrase)
+        } catch .unreadable {
+            Self.log.info("Retrying the Cotypist import in case Cotypist was writing")
+            return try read(passphrase: passphrase)
+        } catch {
+            throw error
+        }
+    }
+
+    /// Reads the log before the database: a checkpoint in between then only copies frames that are
+    /// applied again, so the two stay consistent.
+    private func read(passphrase: Data) throws(CotypistError) -> CotypistData {
         let database: Data
         let wal: Data?
         do {
-            database = try Data(contentsOf: databaseURL)
             wal = FileManager.default.fileExists(atPath: walURL.path(percentEncoded: false)) ? try Data(contentsOf: walURL) : nil
+            database = try Data(contentsOf: databaseURL)
         } catch {
             Self.log.error("Reading the Cotypist database failed: \(error.localizedDescription, privacy: .public)")
             throw .notFound
