@@ -15,6 +15,7 @@ struct SessionContext: Sendable {
     var windowTitle: String?
     var loadedAt = ContinuousClock.now
     var keepsDate = false
+    var beforeAnchor: String?
 }
 
 struct ContextRequest {

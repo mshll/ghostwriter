@@ -613,11 +613,13 @@ final class CompletionCoordinator {
             textBefore: snapshot.textBefore,
             textAfter: snapshot.isMidLine ? snapshot.textAfter : "",
             mode: mode == .draft ? .draft : .inline,
-            keepsDate: context.keepsDate
+            keepsDate: context.keepsDate,
+            beforeAnchor: context.beforeAnchor
         ), with: builder)
         if prompt.includesDate, !context.keepsDate, field?.id == snapshot.id {
             self.context?.keepsDate = true
         }
+        if mode != .draft, field?.id == snapshot.id { self.context?.beforeAnchor = prompt.beforeAnchor }
         return prompt
     }
 
