@@ -18,6 +18,7 @@ struct ObserverRegistration: @unchecked Sendable {
 
 actor CaptureWorker {
     private static let log = Logger.gw("capture")
+    private static let signposter = OSSignposter(logger: log)
     private static let appNotifications = [kAXFocusedUIElementChangedNotification, kAXFocusedWindowChangedNotification]
     private static let fieldNotifications = [
         kAXValueChangedNotification, kAXSelectedTextChangedNotification, kAXUIElementDestroyedNotification,
@@ -74,6 +75,8 @@ actor CaptureWorker {
 
     func read(_ app: AppTarget, rule: AppRule) -> ReadOutcome {
         let started = ContinuousClock.now
+        let callsBefore = AXElement.callCount
+        let signpost = Self.signposter.beginInterval("FieldRead")
         var diagnostics = ReadDiagnostics(
             bundleID: app.identity.bundleID, duration: .zero, textPath: .none, caretSource: .none, reason: nil
         )
@@ -101,6 +104,8 @@ actor CaptureWorker {
         }
         diagnostics.duration = ContinuousClock.now - started
         diagnostics.reason = result.reason
+        diagnostics.axCalls = AXElement.callCount - callsBefore
+        Self.signposter.endInterval("FieldRead", signpost, "\(diagnostics.axCalls) calls")
         return ReadOutcome(pid: app.identity.pid, result: result, diagnostics: diagnostics, retrySoon: retrySoon)
     }
 

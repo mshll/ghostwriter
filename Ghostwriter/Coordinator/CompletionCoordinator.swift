@@ -14,6 +14,7 @@ import os
 
 final class CompletionCoordinator {
     nonisolated private static let log = Logger.gw("Coordinator")
+    nonisolated private static let signposter = OSSignposter(logger: log)
     private static let typingWindow: Duration = .milliseconds(1500)
     private static let deletePause: Duration = .milliseconds(400)
     private static let autoSelectionDelay: Duration = .milliseconds(350)
@@ -209,6 +210,8 @@ final class CompletionCoordinator {
     // MARK: Field events
 
     private func handle(_ event: FocusEvent) {
+        let signpost = Self.signposter.beginInterval("FieldEvent")
+        defer { Self.signposter.endInterval("FieldEvent", signpost) }
         switch event {
         case .focused(let snapshot), .changed(let snapshot):
             if field?.id == snapshot.id {
@@ -334,6 +337,8 @@ final class CompletionCoordinator {
     // MARK: Keys
 
     private func handleKey(_ event: KeyEvent) {
+        let signpost = Self.signposter.beginInterval("Key")
+        defer { Self.signposter.endInterval("Key", signpost) }
         let pressed = HotKey(keyCode: event.keyCode, modifierFlags: NSEvent.ModifierFlags(rawValue: event.modifiers))
         guard !registeredKeys.contains(pressed) else { return }
         pointerMovedLast = false
@@ -480,7 +485,7 @@ final class CompletionCoordinator {
     }
 
     private func startGeneration(for snapshot: FieldSnapshot, mode: CompletionRequest.Mode, forced: Bool) {
-        let delay: Duration = forced ? .zero : BuiltInAppRules.isTerminal(snapshot.app.bundleID) ? .milliseconds(30) : .milliseconds(5)
+        let delay: Duration = !forced && BuiltInAppRules.isTerminal(snapshot.app.bundleID) ? .milliseconds(30) : .zero
         generationCount += 1
         let id = generationCount
         let task = Task { [weak self] in
@@ -771,6 +776,8 @@ final class CompletionCoordinator {
     // MARK: Showing suggestions
 
     private func present(_ texts: [String], from snapshot: FieldSnapshot, kind: ActiveSuggestion.Kind, settled: Bool) {
+        let signpost = Self.signposter.beginInterval("Present")
+        defer { Self.signposter.endInterval("Present", signpost) }
         let candidates = texts.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard let current = field, current.id == snapshot.id, !candidates.isEmpty, emoji == nil, !editedSinceRead,
               Self.restOfLine(current.textAfter) == Self.restOfLine(snapshot.textAfter) else { return }
@@ -1052,7 +1059,7 @@ final class CompletionCoordinator {
         let rule = rule(for: snapshot)
         guard rule.typoFixesEnabled != false, (rule.typoFixesEnabled ?? preferences.typoFixesEnabled) || preferences.suppressOnTypo,
               snapshot.selectedText.isEmpty, snapshot.kind != .code, snapshot.kind != .terminal,
-              !InputSource.isInputMethodActive else { return false }
+              SpellCheck.finishesWord(snapshot.textBefore), !InputSource.isInputMethodActive else { return false }
         let language = LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(400)))
         let found = preferences.sentenceTypoCheck && SpellCheck.endsSentence(snapshot.textBefore)
             ? SpellCheck.sentence(endingAt: snapshot.textBefore, language: language)
@@ -1061,11 +1068,11 @@ final class CompletionCoordinator {
         let candidates = found.filter { !ignored.contains($0.word.lowercased()) }.suffix(Self.maxSentenceTypos)
         guard !candidates.isEmpty else { return false }
         typoCheck?.cancel()
-        typoCheck = Task { [weak self] in await self?.judge(Array(candidates), in: snapshot) }
+        typoCheck = Task { [weak self] in await self?.judge(Array(candidates), in: snapshot, language: language) }
         return true
     }
 
-    private func judge(_ found: [Misspelling], in snapshot: FieldSnapshot) async {
+    private func judge(_ found: [Misspelling], in snapshot: FieldSnapshot, language: String?) async {
         var fixes: [TypoFix] = []
         var automatic = true
         for (index, misspelling) in found.enumerated() {
@@ -1089,7 +1096,7 @@ final class CompletionCoordinator {
             return
         }
         if preferences.autoFixTypos, automatic, fixes.count == 1, let fix = fixes.first, fix.endsText(snapshot.textBefore),
-           Self.autoFixLanguages.contains(LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(400))) ?? "") {
+           Self.autoFixLanguages.contains(language ?? "") {
             autoFix(fix, in: snapshot)
             return
         }

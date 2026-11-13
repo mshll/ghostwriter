@@ -19,6 +19,9 @@ enum Probe {
         case "bench":
             bench(count: arguments.dropFirst().first.flatMap(Int.init) ?? 50,
                   delay: arguments.dropFirst(2).first.flatMap(Double.init) ?? 0.5)
+        case "cost":
+            cost(count: arguments.dropFirst().first.flatMap(Int.init) ?? 50,
+                 watchSeconds: arguments.dropFirst(2).first.flatMap(Double.init) ?? 0)
         case "dump":
             AXTools.dumpFocused()
             return
@@ -29,7 +32,7 @@ enum Probe {
             AXTools.select(location: Int(arguments[1]) ?? 0, length: arguments.dropFirst(2).first.flatMap(Int.init) ?? 0)
             return
         default:
-            print("usage: gw-axprobe [watch [seconds] | bench <count> [delay] | dump | focus <bundleID> <domID> [caret] | select <loc> [len]]")
+            print("usage: gw-axprobe [watch [seconds] | bench <count> [delay] | cost <count> [watch seconds] | dump | focus <bundleID> <domID> [caret] | select <loc> [len]]")
             return
         }
         let app = NSApplication.shared
@@ -71,6 +74,57 @@ enum Probe {
             summarize()
             exit(0)
         }
+    }
+
+    /// Read cost in TextEdit only, printing no text: `count` back-to-back reads, then `watchSeconds` of reads that
+    /// the field's own notifications start, for scripted typing from another process.
+    static func cost(count: Int, watchSeconds: Double) {
+        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.TextEdit" else {
+            print("TextEdit is not frontmost; nothing read")
+            exit(1)
+        }
+        let tracker = FocusTracker()
+        var reads: [(ms: Double, calls: Int)] = []
+        tracker.onDiagnostics = { reads.append((milliseconds($0.duration), $0.axCalls)) }
+        Task {
+            for _ in 0..<count {
+                _ = await tracker.snapshot()
+            }
+            report("on demand", reads)
+            reads = []
+            guard watchSeconds > 0 else { exit(0) }
+            var events = 0
+            tracker.onEvent = { _ in events += 1 }
+            tracker.start()
+            print("watching \(watchSeconds)s")
+            do {
+                try await Task.sleep(for: .seconds(watchSeconds))
+            } catch {
+                print("cancelled: \(error)")
+            }
+            tracker.stop()
+            report("notified", reads)
+            print("events \(events)")
+            exit(0)
+        }
+    }
+
+    static func report(_ label: String, _ reads: [(ms: Double, calls: Int)]) {
+        guard !reads.isEmpty else {
+            print("\(label): no reads")
+            return
+        }
+        let times = reads.map(\.ms).sorted()
+        let calls = reads.map(\.calls).sorted()
+        func percentile<T>(_ values: [T], _ p: Double) -> T { values[min(values.count - 1, Int(Double(values.count - 1) * p + 0.5))] }
+        print(String(
+            format: "%@: reads=%d p50=%.3fms p95=%.3fms calls p50=%d min=%d max=%d", label, reads.count,
+            percentile(times, 0.5), percentile(times, 0.95), percentile(calls, 0.5), calls.first ?? 0, calls.last ?? 0
+        ))
+    }
+
+    static func milliseconds(_ duration: Duration) -> Double {
+        Double(duration.components.attoseconds) / 1e15 + Double(duration.components.seconds) * 1e3
     }
 
     static func record(_ diagnostics: ReadDiagnostics) {

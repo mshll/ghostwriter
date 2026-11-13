@@ -41,6 +41,7 @@ public struct ReadDiagnostics: Sendable, Hashable {
     public var textPath: TextPath
     public var caretSource: CaretSource
     public var reason: IneligibleReason?
+    public var axCalls = 0
 }
 
 public enum AccessibilityPermission {
