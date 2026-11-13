@@ -155,10 +155,11 @@ public enum ModelCatalog {
         }
         let custom = files
             .filter { $0.pathExtension.lowercased() == "gguf" && !known.contains($0.lastPathComponent) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .map { url in
                 let name = url.deletingPathExtension().lastPathComponent
-                let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 } ?? 0
+                let size = (try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { $0 } ?? 0
                 return ModelSpec(
                     id: "custom:\(url.lastPathComponent)", displayName: name, family: .custom, repo: "",
                     fileName: url.lastPathComponent, sizeBytes: Int64(size), sha256: nil, minMemoryGB: 0, minTier: 0

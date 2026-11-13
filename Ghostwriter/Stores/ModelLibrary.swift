@@ -17,6 +17,7 @@ final class ModelLibrary {
     private(set) var downloadProgress: [String: Double] = [:]
     private(set) var downloadErrors: [String: String] = [:]
     private(set) var activeModel: ModelSpec?
+    private(set) var foundModels: [FoundModel] = []
 
     @ObservationIgnored var onActiveModelChange: ((ModelSpec?) -> Void)?
 
@@ -24,6 +25,7 @@ final class ModelLibrary {
     @ObservationIgnored private let appState: AppState
     @ObservationIgnored private let downloader: ModelDownloader
     @ObservationIgnored private var downloadTasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
 
     init(preferences: Preferences, appState: AppState, downloader: ModelDownloader) {
         self.preferences = preferences
@@ -42,7 +44,11 @@ final class ModelLibrary {
     func isRecommended(_ spec: ModelSpec) -> Bool { spec.id == recommended?.id }
 
     func mayExceedMemory(_ spec: ModelSpec) -> Bool {
-        spec.sizeBytes + Self.memoryHeadroomBytes > Int64(hardware.memoryGB) << 30
+        mayExceedMemory(bytes: spec.sizeBytes)
+    }
+
+    func mayExceedMemory(bytes: Int64) -> Bool {
+        bytes + Self.memoryHeadroomBytes > Int64(hardware.memoryGB) << 30
     }
 
     func refresh() {
@@ -51,6 +57,30 @@ final class ModelLibrary {
         models = ModelCatalog.curated + installed.filter { !curatedIDs.contains($0.id) }
         installedIDs = Set(installed.map(\.id))
         updateActiveModel()
+        scanForFoundModels()
+    }
+
+    func use(_ found: FoundModel) throws {
+        let destination = AppPaths.models.appending(path: found.fileName)
+        guard (try? FileManager.default.attributesOfItem(atPath: destination.path)) == nil else {
+            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+        }
+        try FileManager.default.createDirectory(at: AppPaths.models, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: found.url)
+        refresh()
+        if let spec = models.first(where: { $0.fileName == found.fileName }) {
+            select(spec)
+        }
+    }
+
+    private func scanForFoundModels() {
+        scanTask?.cancel()
+        let linked = Set(models.filter(isInstalled).map { $0.localURL.resolvingSymlinksInPath().path })
+        scanTask = Task {
+            let found = await Task.detached(priority: .utility) { LocalModelFinder().baseModels() }.value
+            guard !Task.isCancelled else { return }
+            foundModels = found.filter { !linked.contains($0.url.path) }
+        }
     }
 
     func select(_ spec: ModelSpec) {

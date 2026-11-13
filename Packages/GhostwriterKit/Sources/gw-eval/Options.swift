@@ -55,7 +55,7 @@ struct Options {
                        [--length-penalty X] [--floor X] [--confidence X] [--midline-confidence X] [--early-stop X] [--narrow-after N] [--narrow-stop P]
                        [--midline-bonus X] [--midline-margin X] [--midline-tokens N] [--midline-candidates N] [--no-echo-guard]
                        [--midline-beams N (0: as --beams)] [--midline-rerank-every N (0: only when the search ends)] [--midline-budget N]
-                       [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--reverse-screen] [--screen-tokens N] [--total-tokens N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
+                       [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--reverse-screen] [--screen-tokens N] [--total-tokens N] [--before-slack N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
                        [--first-shown]   (score the first suggestion streamed, not the final one)
                        [--history <jsonl>]   (writing history from eval/scripts/build_history_set.py: examples and word bias as in the app)
                        [--examples N (2)] [--bias-strength X (1.5)] [--same-app-boost X (1.5)] [--recency-boost X (0.2)]   (with --history)
@@ -111,6 +111,7 @@ struct Options {
             case "--reverse-screen": options.reverseScreen = true
             case "--screen-tokens": options.budgets.screen = try number(flag)
             case "--total-tokens": options.budgets.total = try number(flag)
+            case "--before-slack": options.budgets.beforeSlack = try number(flag)
             case "--prompt":
                 let name = try value(flag)
                 guard let variant = PromptVariant(rawValue: name) else { throw UsageError("unknown prompt variant \(name)") }

@@ -47,7 +47,10 @@ public struct PromptBuilder: Sendable {
         let screenSection = fitter.fit(screen[...], budget: allocation[3], keep: .end)
         let clipboardSection = fitter.fit(clipboard[...], budget: allocation[4], keep: .start)
         let after = fitter.fit(afterSource[...], budget: allocation[1], keep: .start)
-        let before = fitter.fit(Self.plainTrailingSpaces(typed.head).drop(while: \.isWhitespace), budget: allocation[0], keep: .end)
+        let typedText = Self.plainTrailingSpaces(typed.head).drop(while: \.isWhitespace)
+        let (before, beforeAnchor) = context.mode == .inline
+            ? fitter.fitEnd(typedText, budget: allocation[0], slack: budgets.beforeSlack, anchor: context.beforeAnchor)
+            : (fitter.fit(typedText, budget: allocation[0], keep: .end), nil)
 
         var text = PromptText.preamble
         if !instructions.isEmpty { text += PromptText.instructionsLabel + instructions + "\n\n" }
@@ -66,7 +69,8 @@ public struct PromptBuilder: Sendable {
             text: text,
             partialWord: String(typed.partial),
             language: language,
-            includesDate: EnvironmentLines.includesDate(context, language: language)
+            includesDate: EnvironmentLines.includesDate(context, language: language),
+            beforeAnchor: beforeAnchor
         )
     }
 

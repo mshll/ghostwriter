@@ -9,6 +9,8 @@ struct ModelPane: View {
     @State private var isConfirmingDeletion = false
     @State private var deletionError: String?
     @State private var isShowingDeletionError = false
+    @State private var useError: String?
+    @State private var isShowingUseError = false
 
     var body: some View {
         SettingsPaneView(pane: .model) {
@@ -32,6 +34,17 @@ struct ModelPane: View {
                     .settingsSearchTarget(ModelSetting.models)
             } footer: {
                 HardwareSummary(hardware: library.hardware)
+            }
+
+            if !library.foundModels.isEmpty {
+                Section {
+                    ForEach(library.foundModels) { found in
+                        FoundModelRow(found: found) { use(found) }
+                    }
+                } header: {
+                    Text("Found on this Mac")
+                        .settingsSearchTarget(ModelSetting.found)
+                }
             }
 
             Section {
@@ -59,6 +72,20 @@ struct ModelPane: View {
             Button("OK") {}
         } message: {
             Text(deletionError ?? "")
+        }
+        .alert("Couldn\u{2019}t use the model", isPresented: $isShowingUseError) {
+            Button("OK") {}
+        } message: {
+            Text(useError ?? "")
+        }
+    }
+
+    private func use(_ found: FoundModel) {
+        do {
+            try library.use(found)
+        } catch {
+            useError = error.localizedDescription
+            isShowingUseError = true
         }
     }
 
@@ -134,6 +161,31 @@ private struct ModelRow: View {
         if spec.family == .custom { parts.append("custom") }
         if installed { parts.append("downloaded") }
         return parts.joined(separator: " \u{00B7} ")
+    }
+}
+
+private struct FoundModelRow: View {
+    @Environment(ModelLibrary.self) private var library
+    let found: FoundModel
+    let use: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(found.displayName).fontWeight(.medium)
+                Text("\(found.sizeBytes.formatted(.byteCount(style: .file))) \u{00B7} \(found.source.rawValue)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if library.mayExceedMemory(bytes: found.sizeBytes) {
+                    Label("May not fit in this Mac\u{2019}s \(library.hardware.memoryGB) GB of memory alongside your apps.", systemImage: "memorychip")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            Spacer()
+            Button("Use", action: use)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -247,12 +299,13 @@ private enum PowerSource {
 }
 
 enum ModelSetting: SettingKey {
-    case modelInUse, models, ownModels, onDemand, shorterOnBattery, smallerModel
+    case modelInUse, models, found, ownModels, onDemand, shorterOnBattery, smallerModel
 
     var text: SettingText {
         switch self {
         case .modelInUse: SettingText("Model in use", keywords: ["status", "loading", "ready", "failed"])
         case .models: SettingText("Models", keywords: ["download", "gemma", "gguf", "delete"])
+        case .found: SettingText("Found on this Mac", keywords: ["lm studio", "ollama", "hugging face", "llama.cpp", "gguf"])
         case .ownModels: SettingText("Your own models", subtitle: "Drop a base (pretrained, not instruct or chat) .gguf file into the Models folder, then refresh. Ghostwriter continues text, so base models work best.", keywords: ["gguf", "custom", "folder"])
         case .onDemand: SettingText("Only suggest when asked", subtitle: "Suggestions appear only when you press the Suggest Now shortcut.", keywords: ["battery", "power", "on demand"])
         case .shorterOnBattery: SettingText("Shorter suggestions on battery", subtitle: "Short suggestions finish sooner and use less power.", keywords: ["battery", "power"])

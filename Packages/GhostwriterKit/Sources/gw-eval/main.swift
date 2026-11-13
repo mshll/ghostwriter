@@ -84,6 +84,7 @@ struct Harness {
     var builder: PromptBuilder
     var options: Options
     var personalization: Personalization?
+    let beforeAnchors = BeforeAnchors()
 
     static func load(_ options: Options, stepping: CompletionEngine.Stepping = .automatic) async throws -> Harness {
         let engine = CompletionEngine(stepping: stepping)
@@ -101,8 +102,10 @@ struct Harness {
         let built = builder.build(PromptContext(
             appName: row.app ?? "TextEdit", domain: row.domain, fieldKind: FieldKind(rawValue: row.kind ?? "") ?? .unknown,
             fieldLabel: row.label, now: fixedNow, examples: try personalization?.examples(for: row) ?? [],
-            screenText: screenText ?? (options.screen ? rowScreen(row) : nil), textBefore: before, textAfter: after, mode: options.draft ? .draft : .inline
+            screenText: screenText ?? (options.screen ? rowScreen(row) : nil), textBefore: before, textAfter: after, mode: options.draft ? .draft : .inline,
+            beforeAnchor: beforeAnchors.anchor(for: row.id)
         ))
+        beforeAnchors.set(built.beforeAnchor, for: row.id)
         let prompt = options.promptVariant.apply(to: built.text, before: String(before.dropLast(built.partialWord.count)))
         return CompletionRequest(
             prompt: prompt, partialWord: built.partialWord, textAfter: String(after.prefix { !$0.isNewline }),
@@ -131,6 +134,19 @@ struct Harness {
         let candidates = try await engine.complete(request, onPartial: onPartial)
         let elapsed = milliseconds(since: start)
         return (candidates, elapsed, await engine.lastStats)
+    }
+}
+
+/// The anchor of a row's previous prompt, so the requests of one typed row keep the same cut, as in the app.
+final class BeforeAnchors: Sendable {
+    private let last = Mutex<(row: String, anchor: String?)?>(nil)
+
+    func anchor(for row: String) -> String? {
+        last.withLock { $0?.row == row ? $0?.anchor : nil }
+    }
+
+    func set(_ anchor: String?, for row: String) {
+        last.withLock { $0 = (row, anchor) }
     }
 }
 
