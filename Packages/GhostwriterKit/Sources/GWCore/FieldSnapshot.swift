@@ -61,6 +61,8 @@ public struct FieldSnapshot: Sendable, Hashable {
     public var textAfter: String
     public var selectedText: String
     public var caretRect: CGRect
+    /// The app reported no caret bounds: `caretRect` is a guess at the field's first line.
+    public var caretIsEstimated: Bool
     public var fieldFrame: CGRect
     public var style: FieldStyle
     public var kind: FieldKind
@@ -84,7 +86,8 @@ public struct FieldSnapshot: Sendable, Hashable {
         label: String? = nil,
         windowTitle: String? = nil,
         url: URL? = nil,
-        language: String? = nil
+        language: String? = nil,
+        caretIsEstimated: Bool = false
     ) {
         self.id = id
         self.app = app
@@ -100,6 +103,7 @@ public struct FieldSnapshot: Sendable, Hashable {
         self.windowTitle = windowTitle
         self.url = url
         self.language = language
+        self.caretIsEstimated = caretIsEstimated
     }
 
     public var isMidLine: Bool {

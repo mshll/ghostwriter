@@ -210,24 +210,37 @@ import Testing
 
     @Test func lineBoxBecomesCaretAtLineStart() {
         let box = CGRect(x: 412, y: 881, width: 702, height: 23)
-        #expect(CaretLocator.emptyLineCaret(box, in: field, rightToLeft: false) == CGRect(x: 412, y: 881, width: 1, height: 23))
+        #expect(CaretLocator.emptyLineCaret(box, in: field, style: FieldStyle(), rightToLeft: false) == CGRect(x: 412, y: 881, width: 1, height: 23))
     }
 
     @Test func rightToLeftCaretSitsAtLineEnd() {
         let box = CGRect(x: 412, y: 881, width: 702, height: 23)
-        #expect(CaretLocator.emptyLineCaret(box, in: field, rightToLeft: true) == CGRect(x: 1114, y: 881, width: 1, height: 23))
+        #expect(CaretLocator.emptyLineCaret(box, in: field, style: FieldStyle(), rightToLeft: true) == CGRect(x: 1114, y: 881, width: 1, height: 23))
     }
 
     @Test func boxOutsideTheFieldIsRejected() {
         let window = CGRect(x: 30, y: 55, width: 1425, height: 939)
-        #expect(CaretLocator.emptyLineCaret(window, in: field, rightToLeft: false) == nil)
+        #expect(CaretLocator.emptyLineCaret(window, in: field, style: FieldStyle(), rightToLeft: false) == nil)
     }
 
     @Test func unknownFieldIsRejected() {
-        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 702, height: 23), in: nil, rightToLeft: false) == nil)
+        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 702, height: 23), in: nil, style: FieldStyle(), rightToLeft: false) == nil)
+    }
+
+    @Test func editableBoxTallerThanTwoLinesIsRejected() {
+        let editable = CGRect(x: 114, y: 586, width: 502, height: 122)
+        #expect(CaretLocator.emptyLineCaret(editable, in: editable, style: FieldStyle(fontSize: 16), rightToLeft: false) == nil)
+    }
+
+    @Test func oneLineEditableBoxIsTheCaretLine() {
+        let editable = CGRect(x: 114, y: 586, width: 502, height: 24)
+        #expect(
+            CaretLocator.emptyLineCaret(editable, in: editable, style: FieldStyle(fontSize: 16), rightToLeft: false)
+                == CGRect(x: 114, y: 586, width: 1, height: 24)
+        )
     }
 
     @Test func narrowRectIsLeftToTheCaretChecks() {
-        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 0, height: 17), in: field, rightToLeft: false) == nil)
+        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 0, height: 17), in: field, style: FieldStyle(), rightToLeft: false) == nil)
     }
 }
