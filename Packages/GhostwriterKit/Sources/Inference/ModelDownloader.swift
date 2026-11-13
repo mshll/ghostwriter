@@ -15,7 +15,15 @@ public actor ModelDownloader {
     private let log = Logger.gw("download")
 
     public init() {
-        self.init(folder: AppPaths.models, configuration: .default, home: FileManager.default.homeDirectoryForCurrentUser)
+        self.init(folder: AppPaths.models, configuration: Self.uncached, home: FileManager.default.homeDirectoryForCurrentUser)
+    }
+
+    /// Model bodies go straight to the partial file; a response cache would only hold a second copy.
+    private static var uncached: URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return configuration
     }
 
     init(folder: URL, configuration: URLSessionConfiguration, home: URL) {
@@ -63,7 +71,6 @@ public actor ModelDownloader {
         }
         // A complete staging file is left behind when the app quits during the checksum; verify it again instead.
         if !Self.hasSize(spec.sizeBytes, staging) {
-            try Self.checkSpace(needed: spec.sizeBytes + Self.spaceMargin, available: availableSpace())
             try await transfer(from: remote, to: staging, spec: spec, job: job, progress: progress)
         }
         try job.checkCancellation()
@@ -116,37 +123,81 @@ public actor ModelDownloader {
         jobs[spec.id]?.cancel()
     }
 
-    public func suspendAll() async {
-        for job in jobs.values { await job.suspend() }
+    public func suspendAll() {
+        for job in jobs.values { job.suspend() }
     }
 
+    /// Each request goes to the stable resolve URL: the signed CDN URL it redirects to expires after about an hour.
     private func transfer(
         from remote: URL, to staging: URL, spec: ModelSpec, job: DownloadJob, progress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        var resumeData = loadResumeData(job.resumeFile)
+        var resumePoint = resumePoint(of: staging, etagFile: job.resumeFile, size: spec.sizeBytes)
+        try Self.checkSpace(needed: spec.sizeBytes - (resumePoint?.offset ?? 0) + Self.spaceMargin, available: availableSpace())
         while true {
-            let resuming = resumeData != nil
-            let task = resumeData.map { session.downloadTask(withResumeData: $0) } ?? session.downloadTask(with: remote)
+            var request = URLRequest(url: remote)
+            if let resumePoint {
+                request.setValue("bytes=\(resumePoint.offset)-", forHTTPHeaderField: "Range")
+                request.setValue(resumePoint.etag, forHTTPHeaderField: "If-Range")
+            }
+            let target = TransferTarget(
+                staging: staging, etagFile: job.resumeFile, resumePoint: resumePoint, expectedBytes: spec.sizeBytes, progress: progress
+            )
+            let end: TransferEnd
             do {
-                try await job.run(task, delegate: delegate, destination: staging, expectedBytes: spec.sizeBytes, progress: progress)
+                end = try await job.run(session.dataTask(with: request), delegate: delegate, target: target)
+            } catch {
+                if job.isCancelled || Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+                throw error
+            }
+            switch end {
+            case .finished:
                 removeIfPresent(job.resumeFile)
                 return
-            } catch {
-                let fresh = (error as? URLError)?.downloadTaskResumeData
-                if job.isCancelled || Task.isCancelled || (error as? URLError)?.code == .cancelled {
-                    if let fresh, !job.isDiscarded { Self.store(fresh, at: job.resumeFile) }
-                    throw CancellationError()
-                }
-                if let fresh {
-                    Self.store(fresh, at: job.resumeFile)
-                    throw error
-                }
-                removeIfPresent(job.resumeFile)
-                guard resuming else { throw error }
-                log.notice("Resuming \(spec.fileName, privacy: .public) failed, starting over: \(error.localizedDescription, privacy: .public)")
-                resumeData = nil
+            case .changed:
+                log.notice("\(spec.fileName, privacy: .public) changed on the server, starting over")
+                resumePoint = nil
             }
         }
+    }
+
+    private func resumePoint(of staging: URL, etagFile: URL, size: Int64) -> ResumePoint? {
+        guard let offset = Self.fileSize(staging), offset > 0, offset < size,
+              FileManager.default.fileExists(atPath: etagFile.path)
+        else { return nil }
+        do {
+            guard let etag = Self.strongETag(try String(contentsOf: etagFile, encoding: .utf8)) else { return nil }
+            return ResumePoint(offset: offset, etag: etag)
+        } catch {
+            log.error("Reading \(etagFile.lastPathComponent, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    fileprivate static func start(_ response: URLResponse, resuming resumePoint: ResumePoint?) -> TransferStart {
+        guard let response = response as? HTTPURLResponse else { return .failed(status: 0) }
+        let etag = strongETag(response.value(forHTTPHeaderField: "ETag"))
+        switch response.statusCode {
+        case 200:
+            return .replace(etag: etag)
+        case 206:
+            guard let resumePoint else { return .failed(status: 206) }
+            guard etag == resumePoint.etag, rangeStart(response) == resumePoint.offset else { return .changed }
+            return .append(at: resumePoint.offset)
+        default:
+            return .failed(status: response.statusCode)
+        }
+    }
+
+    /// If-Range accepts only strong validators; a weak ETag (`W/"..."`) cannot prove two byte ranges belong together.
+    private static func strongETag(_ value: String?) -> String? {
+        guard let value, value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\""), !value.contains(where: \.isNewline)
+        else { return nil }
+        return value
+    }
+
+    private static func rangeStart(_ response: HTTPURLResponse) -> Int64? {
+        guard let range = response.value(forHTTPHeaderField: "Content-Range"), range.hasPrefix("bytes ") else { return nil }
+        return Int64(range.dropFirst("bytes ".count).prefix { $0.isNumber })
     }
 
     static func checkSpace(needed: Int64, available: Int64?) throws {
@@ -165,12 +216,16 @@ public actor ModelDownloader {
     }
 
     private static func hasSize(_ size: Int64, _ url: URL) -> Bool {
-        guard size > 0, FileManager.default.fileExists(atPath: url.path) else { return false }
+        size > 0 && fileSize(url) == size
+    }
+
+    private static func fileSize(_ url: URL) -> Int64? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         do {
-            return try url.resourceValues(forKeys: [.fileSizeKey]).fileSize.map(Int64.init) == size
+            return (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value
         } catch {
             Logger.gw("download").error("Reading the size of \(url.lastPathComponent, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
-            return false
+            return nil
         }
     }
 
@@ -198,29 +253,6 @@ public actor ModelDownloader {
         }
     }
 
-    /// URLSession raises an Objective-C exception on resume data that is not a property list dictionary,
-    /// so anything else is discarded.
-    private func loadResumeData(_ url: URL) -> Data? {
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        do {
-            let data = try Data(contentsOf: url)
-            if try PropertyListSerialization.propertyList(from: data, format: nil) is [String: Any] { return data }
-            log.error("Discarding malformed resume data \(url.lastPathComponent, privacy: .public)")
-        } catch {
-            log.error("Discarding unreadable resume data \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
-        removeIfPresent(url)
-        return nil
-    }
-
-    static func store(_ data: Data, at url: URL) {
-        do {
-            try data.write(to: url, options: .atomic)
-        } catch {
-            Logger.gw("download").error("Saving resume data failed: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     private func removeIfPresent(_ url: URL) {
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
@@ -231,12 +263,60 @@ public actor ModelDownloader {
     }
 }
 
+private struct ResumePoint: Equatable, Sendable {
+    var offset: Int64
+    var etag: String
+}
+
+private enum TransferStart: Equatable {
+    case append(at: Int64)
+    case replace(etag: String?)
+    case changed
+    case failed(status: Int)
+}
+
+private enum TransferEnd: Sendable {
+    case finished
+    case changed
+}
+
+private struct TransferTarget: Sendable {
+    var staging: URL
+    var etagFile: URL
+    var resumePoint: ResumePoint?
+    var expectedBytes: Int64
+    var progress: @Sendable (Double) -> Void
+
+    /// Truncates before saving the ETag, so a quit in between never pairs old bytes with the new ETag.
+    func open(for start: TransferStart) throws -> (FileHandle, position: Int64)? {
+        let offset: Int64
+        switch start {
+        case .append(let at): offset = at
+        case .replace: offset = 0
+        case .changed, .failed: return nil
+        }
+        if !FileManager.default.fileExists(atPath: staging.path) {
+            FileManager.default.createFile(atPath: staging.path, contents: nil)
+        }
+        let file = try FileHandle(forWritingTo: staging)
+        try file.truncate(atOffset: UInt64(offset))
+        if case .replace(let etag) = start {
+            if let etag {
+                try etag.write(to: etagFile, atomically: true, encoding: .utf8)
+            } else if FileManager.default.fileExists(atPath: etagFile.path) {
+                try FileManager.default.removeItem(at: etagFile)
+            }
+        }
+        return (file, offset)
+    }
+}
+
 private final class DownloadJob: Sendable {
     private enum Stop { case cancel, suspend }
 
     let resumeFile: URL
     private let stop = Mutex<Stop?>(nil)
-    private let current = Mutex<URLSessionDownloadTask?>(nil)
+    private let current = Mutex<URLSessionDataTask?>(nil)
 
     init(resumeFile: URL) {
         self.resumeFile = resumeFile
@@ -249,14 +329,11 @@ private final class DownloadJob: Sendable {
         if isCancelled || Task.isCancelled { throw CancellationError() }
     }
 
-    func run(
-        _ task: URLSessionDownloadTask, delegate: DownloadDelegate, destination: URL, expectedBytes: Int64,
-        progress: @escaping @Sendable (Double) -> Void
-    ) async throws {
+    func run(_ task: URLSessionDataTask, delegate: DownloadDelegate, target: TransferTarget) async throws -> TransferEnd {
         current.withLock { $0 = task }
         defer { current.withLock { $0 = nil } }
         try checkCancellation()
-        try await delegate.run(task, destination: destination, expectedBytes: expectedBytes, progress: progress)
+        return try await delegate.run(task, target: target)
     }
 
     func cancel() {
@@ -264,85 +341,86 @@ private final class DownloadJob: Sendable {
         current.withLock { $0 }?.cancel()
     }
 
-    func suspend() async {
+    /// Bytes reach the staging file as they arrive, so stopping the task is all a quit needs.
+    func suspend() {
         guard stop.withLock({ stopped in
             guard stopped == nil else { return false }
             stopped = .suspend
             return true
         }) else { return }
-        guard let task = current.withLock({ $0 }) else { return }
-        let resumeFile = resumeFile
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            task.cancel(byProducingResumeData: { data in
-                if let data { ModelDownloader.store(data, at: resumeFile) }
-                continuation.resume()
-            })
-        }
+        current.withLock { $0 }?.cancel()
     }
 }
 
-private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, Sendable {
+private final class DownloadDelegate: NSObject, URLSessionDataDelegate, Sendable {
     private struct Pending: Sendable {
-        var continuation: CheckedContinuation<Void, any Error>
-        var destination: URL
-        var expectedBytes: Int64
-        var progress: @Sendable (Double) -> Void
-        var failure: (any Error)?
+        var continuation: CheckedContinuation<TransferEnd, any Error>
+        var target: TransferTarget
+        var file: FileHandle?
+        var position: Int64 = 0
+        var end: Result<TransferEnd, any Error>?
     }
 
     private let pending = Mutex<[Int: Pending]>([:])
 
-    func run(
-        _ task: URLSessionDownloadTask, destination: URL, expectedBytes: Int64,
-        progress: @escaping @Sendable (Double) -> Void
-    ) async throws {
+    func run(_ task: URLSessionDataTask, target: TransferTarget) async throws -> TransferEnd {
         try await withCheckedThrowingContinuation { continuation in
-            pending.withLock {
-                $0[task.taskIdentifier] = Pending(
-                    continuation: continuation, destination: destination, expectedBytes: expectedBytes, progress: progress
-                )
-            }
+            pending.withLock { $0[task.taskIdentifier] = Pending(continuation: continuation, target: target) }
             task.resume()
         }
     }
 
     func urlSession(
-        _ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
-        totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64
+        _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+        completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
     ) {
-        guard let entry = pending.withLock({ $0[downloadTask.taskIdentifier] }) else { return }
-        let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : entry.expectedBytes
-        guard total > 0 else { return }
-        entry.progress(min(1, Double(totalBytesWritten) / Double(total)))
-    }
-
-    /// Also called for HTTP error statuses: URLSession reports only client-side failures as errors.
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard let entry = pending.withLock({ $0[downloadTask.taskIdentifier] }) else { return }
-        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
-        let failure: (any Error)?
-        if !(200..<300).contains(status) {
-            failure = InferenceError.downloadFailed("the server answered HTTP \(status)")
-        } else {
-            do {
-                if FileManager.default.fileExists(atPath: entry.destination.path) {
-                    try FileManager.default.removeItem(at: entry.destination)
-                }
-                try FileManager.default.moveItem(at: location, to: entry.destination)
-                failure = nil
-            } catch {
-                failure = error
+        let id = dataTask.taskIdentifier
+        guard let target = pending.withLock({ $0[id]?.target }) else { return completionHandler(.cancel) }
+        let start = ModelDownloader.start(response, resuming: target.resumePoint)
+        let opened: Result<(FileHandle, position: Int64)?, any Error> = Result { try target.open(for: start) }
+        pending.withLock { entries in
+            switch (start, opened) {
+            case (_, .success(let (file, position)?)):
+                entries[id]?.file = file
+                entries[id]?.position = position
+            case (.failed(let status), _):
+                entries[id]?.end = .failure(InferenceError.downloadFailed("the server answered HTTP \(status)"))
+            case (_, .failure(let error)):
+                entries[id]?.end = .failure(error)
+            default:
+                entries[id]?.end = .success(.changed)
             }
         }
-        pending.withLock { $0[downloadTask.taskIdentifier]?.failure = failure }
+        completionHandler(pending.withLock { $0[id]?.file } == nil ? .cancel : .allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        let id = dataTask.taskIdentifier
+        guard let entry = pending.withLock({ $0[id] }), entry.end == nil, let file = entry.file else { return }
+        do {
+            try file.write(contentsOf: data)
+        } catch {
+            pending.withLock { $0[id]?.end = .failure(error) }
+            dataTask.cancel()
+            return
+        }
+        let position = entry.position + Int64(data.count)
+        pending.withLock { $0[id]?.position = position }
+        guard entry.target.expectedBytes > 0 else { return }
+        entry.target.progress(min(1, Double(position) / Double(entry.target.expectedBytes)))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         guard let entry = pending.withLock({ $0.removeValue(forKey: task.taskIdentifier) }) else { return }
-        if let error = error ?? entry.failure {
-            entry.continuation.resume(throwing: error)
-        } else {
-            entry.continuation.resume()
+        var end = entry.end ?? error.map { .failure($0) } ?? .success(.finished)
+        if let file = entry.file {
+            do {
+                try file.close()
+            } catch {
+                Logger.gw("download").error("Closing the staging file failed: \(error.localizedDescription, privacy: .public)")
+                if case .success(.finished) = end { end = .failure(error) }
+            }
         }
+        entry.continuation.resume(with: end)
     }
 }
