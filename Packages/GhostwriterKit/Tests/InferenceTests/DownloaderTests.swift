@@ -9,10 +9,12 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         var status: Int
         var body: Data
         var delay: Duration = .zero
+        var stallAfter: Int?
     }
 
     static let replies = Mutex<[String: Reply]>([:])
     static let hits = Mutex<[String: Int]>([:])
+    static let ranges = Mutex<[String: [String]]>([:])
     private let stopped = Atomic<Bool>(false)
 
     /// URL-less requests (from unusable resume data) go to URLSession's own handling, which fails them at once.
@@ -22,19 +24,29 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
     override func startLoading() {
         let name = request.url?.lastPathComponent ?? ""
         Self.hits.withLock { $0[name, default: 0] += 1 }
+        let range = request.value(forHTTPHeaderField: "Range")
+        if let range { Self.ranges.withLock { $0[name, default: []].append(range) } }
         let reply = Self.replies.withLock { $0[name] } ?? Reply(status: 404, body: Data())
+        let offset = range.flatMap { Int($0.dropFirst("bytes=".count).prefix { $0.isNumber }) } ?? 0
+        let partial = reply.status == 200 && offset > 0
+        let payload = partial ? reply.body.dropFirst(offset) : reply.body
+        var headers = ["Content-Length": "\(payload.count)", "ETag": "\"stub\"", "Accept-Ranges": "bytes"]
+        if partial { headers["Content-Range"] = "bytes \(offset)-\(reply.body.count - 1)/\(reply.body.count)" }
+        let stallAfter = offset == 0 ? reply.stallAfter : nil
         let delay = DispatchTimeInterval.milliseconds(Int(reply.delay.components.seconds * 1000 + reply.delay.components.attoseconds / 1_000_000_000_000_000))
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
             guard !stopped.load(ordering: .relaxed), let url = request.url,
-                  let response = HTTPURLResponse(url: url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: [
-                      "Content-Length": "\(reply.body.count)", "ETag": "\"stub\"", "Accept-Ranges": "bytes",
-                  ])
+                  let response = HTTPURLResponse(url: url, statusCode: partial ? 206 : reply.status, httpVersion: "HTTP/1.1", headerFields: headers)
             else {
                 if !stopped.load(ordering: .relaxed) { client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL)) }
                 return
             }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: reply.body)
+            if let stallAfter {
+                client?.urlProtocol(self, didLoad: payload.prefix(stallAfter))
+                return
+            }
+            client?.urlProtocol(self, didLoad: payload)
             client?.urlProtocolDidFinishLoading(self)
         }
     }
@@ -119,6 +131,56 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         #expect(started.duration(to: .now) < .seconds(2))
         #expect(!exists(spec.fileName))
         await downloader.suspendAll()
+    }
+
+    func waitUntil(_ condition: () async -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while await !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
+    }
+
+    func startStalledDownload(_ downloader: ModelDownloader, _ spec: ModelSpec) async throws -> Task<URL, any Error> {
+        let received = Mutex(false)
+        let task = Task { try await downloader.download(spec) { _ in received.withLock { $0 = true } } }
+        try await waitUntil { received.withLock { $0 } }
+        return task
+    }
+
+    @Test func downloadStoppedByQuitResumesWhereItStopped() async throws {
+        let spec = makeSpec(.init(status: 200, body: body, stallAfter: 50_000))
+        let downloader = makeDownloader()
+        let task = try await startStalledDownload(downloader, spec)
+        await downloader.suspendAll()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(await downloader.interrupted(among: [spec]) == [spec])
+
+        let url = try await makeDownloader().download(spec) { _ in }
+        #expect(try Data(contentsOf: url) == body)
+        #expect(StubProtocol.ranges.withLock { $0[spec.fileName] } == ["bytes=50000-"])
+        #expect(await makeDownloader().interrupted(among: [spec]).isEmpty)
+    }
+
+    @Test(arguments: [Stop.cancel, .taskCancel]) func cancelledDownloadLeavesNothingToResume(stop: Stop) async throws {
+        let spec = makeSpec(.init(status: 200, body: body, stallAfter: 50_000))
+        let downloader = makeDownloader()
+        let task = try await startStalledDownload(downloader, spec)
+        if stop == .cancel { await downloader.cancel(spec) } else { task.cancel() }
+        await #expect(throws: CancellationError.self) { try await task.value }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(!exists(spec.fileName + ".resume") && !exists(spec.fileName + ".download"))
+        #expect(await downloader.interrupted(among: [spec]).isEmpty)
+    }
+
+    @Test func interruptedListsModelsWithLeftoversThatAreNotInstalled() async throws {
+        let resumable = makeSpec(nil), staged = makeSpec(nil), untouched = makeSpec(nil), installed = makeSpec(nil)
+        var custom = makeSpec(nil)
+        custom.repo = ""
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for spec in [resumable, installed, custom] { try Data().write(to: folder.appending(path: spec.fileName + ".resume")) }
+        try body.write(to: folder.appending(path: staged.fileName + ".download"))
+        try body.write(to: folder.appending(path: installed.fileName))
+
+        let specs = [resumable, staged, untouched, installed, custom]
+        #expect(await makeDownloader().interrupted(among: specs) == [resumable, staged])
     }
 
     @Test func completeStagingFileIsVerifiedWithoutDownloading() async throws {
