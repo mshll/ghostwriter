@@ -19,6 +19,7 @@ let package = Package(
         .library(name: "ScreenContext", targets: ["ScreenContext"]),
         .library(name: "Actions", targets: ["Actions"]),
         .library(name: "Proofing", targets: ["Proofing"]),
+        .library(name: "CotypistImport", targets: ["CotypistImport"]),
         .executable(name: "gw-eval", targets: ["gw-eval"]),
         .executable(name: "gw-axprobe", targets: ["gw-axprobe"]),
         .executable(name: "gw-inputprobe", targets: ["gw-inputprobe"]),
@@ -53,6 +54,14 @@ let package = Package(
         .target(name: "ScreenContext", dependencies: ["GWCore"], swiftSettings: swift6),
         .target(name: "Actions", dependencies: ["GWCore"], swiftSettings: swift6),
         .target(name: "Proofing", dependencies: ["GWCore"], swiftSettings: swift6),
+        .target(
+            name: "CotypistImport",
+            dependencies: [
+                "GWCore", "Memory", "Prompting",
+                .product(name: "GRDB", package: "GRDB.swift"), .product(name: "GRDBSQLite", package: "GRDB.swift"),
+            ],
+            swiftSettings: swift6
+        ),
         .executableTarget(
             name: "gw-eval",
             dependencies: ["GWCore", "Inference", "Input", "Prompting", "Proofing", "Actions"],
@@ -70,5 +79,10 @@ let package = Package(
         .testTarget(name: "ActionsTests", dependencies: ["Actions"], swiftSettings: swift6),
         .testTarget(name: "ProofingTests", dependencies: ["Proofing"], swiftSettings: swift6),
         .testTarget(name: "ScreenContextTests", dependencies: ["ScreenContext"], swiftSettings: swift6),
+        .testTarget(
+            name: "CotypistImportTests",
+            dependencies: ["CotypistImport", "Memory", .product(name: "GRDB", package: "GRDB.swift")],
+            swiftSettings: swift6
+        ),
     ]
 )

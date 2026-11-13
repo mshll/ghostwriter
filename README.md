@@ -30,6 +30,7 @@ Press Tab. That's the interface. Tab takes the next word, and the key above Tab 
 - **Your rules for each app.** Turn suggestions off, stop recording, change the insertion method or add instructions for one app.
 - **Typo fixes.** A misspelled word is struck through with the fix next to it: Tab applies it, Esc keeps your word. Names and words you write often are left alone. Optionally, obvious typos are fixed as you type, and Delete right after undoes the fix.
 - **Emoji.** Type `:smile` to pick an emoji.
+- **Coming from Cotypist?** Import your recorded writing, instructions and per-app settings during setup or from Settings > Personalization. macOS asks you to allow access to Cotypist's data once.
 
 ## Privacy
 

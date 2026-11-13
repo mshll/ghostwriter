@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PersonalizationPane: View {
     @Environment(Preferences.self) private var preferences
+    @Environment(AppServices.self) private var services
 
     var body: some View {
         @Bindable var preferences = preferences
@@ -29,6 +30,34 @@ struct PersonalizationPane: View {
             } footer: {
                 Text("Instructions apply to every app. Add app-specific ones in Apps.")
             }
+
+            if services.cotypist.isAvailable {
+                Section {
+                    CotypistImportRow(importer: services.cotypist)
+                }
+            }
+        }
+    }
+}
+
+private struct CotypistImportRow: View {
+    let importer: CotypistImporter
+
+    var body: some View {
+        SettingRow(PersonalizationSetting.cotypist, subtitle: status) {
+            if importer.phase == .importing {
+                ProgressView().controlSize(.small)
+            } else {
+                Button("Import", action: importer.run)
+            }
+        }
+    }
+
+    private var status: String? {
+        switch importer.phase {
+        case .idle, .importing: nil
+        case .finished(let summary): summary
+        case .failed(let message): message
         }
     }
 }
@@ -94,7 +123,7 @@ private struct InstructionsEditor: View {
 }
 
 enum PersonalizationSetting: SettingKey {
-    case learn, strength, name, instructions
+    case learn, strength, name, instructions, cotypist
 
     var text: SettingText {
         switch self {
@@ -102,6 +131,7 @@ enum PersonalizationSetting: SettingKey {
         case .strength: SettingText("Favor your own words", subtitle: "Higher values follow your habits more closely and can occasionally pick a less fitting word.", keywords: ["strength", "personalization"])
         case .name: SettingText("Your name", subtitle: "Used when a suggestion needs your name.", keywords: ["sign-off", "signature"])
         case .instructions: SettingText("Instructions", keywords: ["custom", "prompt", "tone", "about you"])
+        case .cotypist: SettingText("Import from Cotypist", subtitle: "Brings over your recorded writing, instructions and app settings. macOS asks you to allow access.", keywords: ["import", "migrate", "transfer", "history"])
         }
     }
 }

@@ -7,7 +7,6 @@ import os
 final class WritingRecorder {
     nonisolated private static let log = Logger.gw("WritingRecorder")
     private static let saveInterval: TimeInterval = 30
-    private static let minimumCharacters = 100
 
     var isAllowed: (FieldSnapshot) -> Bool = { _ in false }
 
@@ -48,7 +47,7 @@ final class WritingRecorder {
         lastSave = .now
         guard let memory, let snapshot = latest, isAllowed(snapshot) else { return }
         let text = snapshot.textBefore + snapshot.selectedText + snapshot.textAfter
-        guard text.count >= Self.minimumCharacters, text != savedText else { return }
+        guard text.count >= WritingSession.minimumCharacters, text != savedText else { return }
         savedText = text
         let session = WritingSession(
             key: key,

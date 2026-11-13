@@ -1,5 +1,5 @@
 {
-  "originHash" : "5f350884f25935119cf514462b3b3ab491a91b0629b118849d4b7b15a3821696",
+  "originHash" : "290e14c45a411ba92d8ebcd7f9332e4b0bea455ce89cd0022e6316899f69ed74",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,24 +8,6 @@
       "state" : {
         "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
         "version" : "7.11.1"
-      }
-    },
-    {
-      "identity" : "keyboardshortcuts",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sindresorhus/KeyboardShortcuts",
-      "state" : {
-        "revision" : "772133d9dbe800fdac0473226822994c5c162c58",
-        "version" : "3.1.0"
-      }
-    },
-    {
-      "identity" : "sparkle",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sparkle-project/Sparkle",
-      "state" : {
-        "revision" : "eef1a539a373c1f1a320624b1130fc5de7b2e100",
-        "version" : "2.10.0"
       }
     }
   ],

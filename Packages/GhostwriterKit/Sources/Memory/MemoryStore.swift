@@ -89,6 +89,51 @@ public final class MemoryStore: Sendable {
         if purgeDue { try purge(now: now) }
     }
 
+    /// Adds sessions whose keys are new and leaves existing ones untouched. Returns how many of them
+    /// are still stored after retention runs.
+    @discardableResult
+    public func importSessions(_ sessions: [WritingSession]) throws -> Int {
+        let now = Date.now
+        let cutoff = now.addingTimeInterval(-retention.maxAge)
+        let recent = sessions
+            .filter { $0.updatedAt >= cutoff }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(retention.maxSessions)
+        let added = try writer.write { db in
+            var added: [String] = []
+            for session in recent {
+                try db.execute(
+                    sql: """
+                        INSERT INTO writing_sessions
+                            (key, bundleID, domain, fieldLabel, text, bigrams, language, updatedAt, createdAt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(key) DO NOTHING
+                        """,
+                    arguments: [
+                        session.key, session.bundleID, session.domain, session.fieldLabel, session.text,
+                        Words.indexedBigrams(in: session.text), session.language, session.updatedAt, session.updatedAt,
+                    ]
+                )
+                if db.changesCount > 0 { added.append(session.key) }
+            }
+            return added
+        }
+        guard !added.isEmpty else { return 0 }
+        state.withLock { $0.writingChanged() }
+        try purge(now: now)
+        return try writer.read { db in
+            try stride(from: 0, to: added.count, by: 500).reduce(0) { total, start in
+                let keys = added[start..<min(start + 500, added.count)]
+                let placeholders = Array(repeating: "?", count: keys.count).joined(separator: ", ")
+                let kept = try Int.fetchOne(
+                    db, sql: "SELECT COUNT(*) FROM writing_sessions WHERE key IN (\(placeholders))",
+                    arguments: StatementArguments(Array(keys))
+                ) ?? 0
+                return total + kept
+            }
+        }
+    }
+
     /// Deletes the writing, then rebuilds the full-text index, compacts the file and empties the
     /// write-ahead log, so no erased words remain in the database files.
     public func eraseWriting(bundleID: String?) throws {

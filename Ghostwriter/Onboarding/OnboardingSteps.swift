@@ -197,6 +197,8 @@ private struct DownloadControl: View {
 struct PersonalStep: View {
     let model: OnboardingModel
     @Environment(Preferences.self) private var preferences
+    @Environment(AppServices.self) private var services
+    @State private var importsCotypist = true
 
     var body: some View {
         @Bindable var preferences = preferences
@@ -243,8 +245,29 @@ struct PersonalStep: View {
                     Toggle("", isOn: $preferences.autoFixTypos).labelsHidden().toggleStyle(.switch)
                         .disabled(!preferences.typoFixesEnabled)
                 }
+                if services.cotypist.isAvailable {
+                    OnboardingDivider()
+                    OnboardingRow(title: "Bring over your Cotypist history",
+                                  detail: "Your recorded writing and app settings. macOS asks you to allow access.") {
+                        Toggle("", isOn: $importsCotypist).labelsHidden().toggleStyle(.switch)
+                    }
+                }
             }
-            ContinueButton(model: model)
+            Button("Continue") {
+                if services.cotypist.isAvailable, importsCotypist { services.cotypist.run() }
+                model.completeHeadline(thenAdvance: true)
+            }
+            .buttonStyle(OnboardingButtonStyle())
+        }
+        .onAppear {
+            if importsCotypist { services.cotypist.prefillInstructions() }
+        }
+        .onChange(of: importsCotypist) { _, imports in
+            if imports {
+                services.cotypist.prefillInstructions()
+            } else {
+                services.cotypist.clearPrefilledInstructions()
+            }
         }
     }
 }
