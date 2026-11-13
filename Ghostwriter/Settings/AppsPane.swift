@@ -202,11 +202,22 @@ private struct AppRuleEditor: View {
                 }
             }
 
-            Section("Context and privacy") {
+            Section {
                 RuleChoice("Use text from the window", value: $draft.screenContextEnabled,
-                           fallback: builtIn?.screenContextEnabled ?? preferences.screenContextEnabled)
+                           fallback: builtIn?.screenContextEnabled ?? true)
                 RuleChoice("Learn from what you write here", value: $draft.recordWriting,
-                           fallback: builtIn?.recordWriting ?? preferences.recordWriting)
+                           fallback: builtIn?.recordWriting ?? true)
+            } header: {
+                Text("Context and privacy")
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !preferences.screenContextEnabled {
+                        Text("Window text is off everywhere. Turn it on in Context to use it here.")
+                    }
+                    if !preferences.recordWriting {
+                        Text("Learning is off everywhere. Turn it on in Personalization to use it here.")
+                    }
+                }
             }
 
             Section {
