@@ -129,7 +129,7 @@ enum SuggestionsSetting: SettingKey {
 
     var text: SettingText {
         switch self {
-        case .showSuggestions: SettingText("Show suggestions", subtitle: "Turn this off to stop suggestions everywhere. Apps can override it in Apps.", keywords: ["enable", "disable", "completions", "autocomplete"])
+        case .showSuggestions: SettingText("Show suggestions", keywords: ["enable", "disable", "completions", "autocomplete"])
         case .length: SettingText("Suggestion length", subtitle: "Shorter suggestions are right more often. Medium suits most writing.", keywords: ["words", "short", "long", "completions"])
         case .insideText: SettingText("Complete inside existing text", subtitle: "Also suggest when there is text after the cursor on the same line.", keywords: ["mid-line", "middle", "cursor"])
         case .drafts: SettingText("Longer drafts on demand", subtitle: "A shortcut writes a sentence or a paragraph from where you are. Set it in Shortcuts.", keywords: ["paragraph", "sentence", "draft"])
