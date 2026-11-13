@@ -30,7 +30,7 @@ Some apps report their text in unusual ways. `BuiltInAppRules` holds adjustments
 
 Besides the text in the field, the prompt can contain:
 
-- **Your writing.** `Memory` stores the text of fields where Ghostwriter suggests, in a SQLite database on the Mac. For each request it finds passages of earlier writing that share distinctive words with what you type, with full-text search, and prefers the same app and recent text. These passages are examples of your style.
+- **Your writing.** `Memory` stores what you write in fields where Ghostwriter suggests, in a SQLite database on the Mac: the lines you changed, up to 8,000 characters, without the text Ghostwriter inserted or quoted lines that start with `>`. A field you only read, or where you typed fewer than 20 characters, is not stored. For each request it finds passages of earlier writing that share distinctive words with what you type, with full-text search, and prefers the same app and recent text. These passages are examples of your style.
 - **Window text.** `ScreenContext` reads the visible text near the caret through Accessibility, nearest paragraph first: for example, the message you reply to. When an app hides its text, it can recognize the text in a screenshot of the window (with Screen Recording permission).
 - **Clipboard.** Text you copied in the last few minutes. Concealed items, such as passwords, are skipped.
 - **Instructions.** What you wrote about yourself in Settings > Personalization, and instructions for the current app.

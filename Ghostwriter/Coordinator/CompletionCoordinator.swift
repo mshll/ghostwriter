@@ -350,6 +350,7 @@ final class CompletionCoordinator {
             lastTyping = .now
             typedSinceRead += event.characters
             typedTail = String((typedTail + event.characters).suffix(64))
+            recorder.typed(event.characters.count)
             charactersSinceExamples += event.characters.count
             followTypedCharacters(event.characters)
             expandSnippetIfNeeded()
@@ -994,6 +995,7 @@ final class CompletionCoordinator {
         let mode: InsertionMode = text.contains(where: \.isNewline) ? .paste : rule(for: snapshot).insertionMode ?? .standard
         let pid = snapshot.app.pid
         enqueueInsertion { await TextInserter.insert(text, into: pid, mode: mode) }
+        recorder.inserted(text, into: snapshot.id)
         recordAcceptance(of: text, kind: kind, bundleID: snapshot.app.bundleID)
     }
 
@@ -1322,6 +1324,7 @@ final class CompletionCoordinator {
             await TextInserter.insert(expansion.text, into: pid, mode: mode)
             await TextInserter.moveCaretLeft(count: expansion.cursorOffsetFromEnd, in: pid)
         }
+        recorder.inserted(expansion.text, into: snapshot.id)
         recordAcceptance(of: expansion.text, kind: .snippet, bundleID: snapshot.app.bundleID)
     }
 
@@ -1418,6 +1421,7 @@ final class CompletionCoordinator {
             }
             await TextInserter.insert(text, into: pid, mode: mode)
         }
+        recorder.inserted(text, into: snapshot.id)
         recordAcceptance(of: text, kind: .action, bundleID: snapshot.app.bundleID)
     }
 
