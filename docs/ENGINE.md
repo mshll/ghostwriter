@@ -20,7 +20,7 @@ flowchart LR
 
 ### 1. Capture
 
-`FocusTracker` follows the focused text field through Accessibility. `FieldReader` reads the text before and after the caret, the caret's position and the field's font. `FieldClassifier` decides what kind of field it is (email, chat, document, search, code, form and others) from its role, its labels and the app. Secure fields, fields that look like they hold a password, and password managers are never read.
+`FocusTracker` follows the focused text field through Accessibility. `FieldReader` reads the text before and after the caret, the caret's position and the field's font. `FieldClassifier` decides what kind of field it is (email, chat, document, search, code, form and others) from its role, its labels and the app. Secure fields, fields that look like they hold a password, a payment card number, security code or expiry date, or a one-time code, and password managers are never read. These are recognized from the field's labels, placeholder and identifiers, never from its text.
 
 Suggestions start automatically only once the text before the caret holds a space or a line break, so a single word (an email address, a username, a name) gets none. Scripts written without spaces, such as Chinese, Japanese and Thai, are exempt. Suggest now still works on a single word.
 

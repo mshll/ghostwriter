@@ -38,7 +38,7 @@ Your words never leave this Mac.
 
 - Ghostwriter has no cloud service, no account, no analytics and no telemetry.
 - It connects to the internet for two things only: model downloads from Hugging Face and update checks.
-- It never records text from secure fields, password managers or apps you exclude.
+- It never reads or records text from secure fields, payment card and one-time code fields, password managers or apps you exclude.
 - Recorded writing, snippets and statistics are in one database file on your Mac. Settings > Privacy & Data shows it, and you can erase it there.
 - Screenshots for text recognition (optional) stay in memory and are discarded at once.
 

@@ -86,9 +86,12 @@ struct FieldReader {
         if ([domIdentifier].compactMap { $0 } + domClasses).contains(where: { $0.lowercased().contains("pass") }) {
             return rejected(.secureField)
         }
-        if SecretFieldHints.isCredentialAutofill(AXDecode.string(attributes[AXName.valueAutofillType])) {
+        let autofillType = AXDecode.string(attributes[AXName.valueAutofillType])
+        if SecretFieldHints.isCredentialAutofill(autofillType) || SecretFieldHints.isPaymentAutofill(autofillType) {
             return rejected(.secureField)
         }
+        let identifiers = [domIdentifier, AXDecode.string(attributes[kAXIdentifierAttribute])].compactMap { $0 } + domClasses
+        if identifiers.contains(where: SecretFieldHints.namesPaymentOrOneTimeCode) { return rejected(.secureField) }
         let editsWholeDocument = try isEditableDocument(element, role: role)
         let isEditableWeb = attributes[kAXEditableAncestorAttribute] != nil || editsWholeDocument
         guard Self.textRoles.contains(role) || isEditableWeb else { return rejected(.notTextInput) }
@@ -96,7 +99,9 @@ struct FieldReader {
         let labels = [kAXPlaceholderValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute]
             .compactMap { AXDecode.string(attributes[$0]) }
             + AXDecode.strings(attributes[AXName.userInputLabels]) + [label].compactMap { $0 }
-        if labels.contains(where: SecretFieldHints.mentionsPassword) { return rejected(.secureField) }
+        if labels.contains(where: { SecretFieldHints.mentionsPassword($0) || SecretFieldHints.namesPaymentOrOneTimeCode($0) }) {
+            return rejected(.secureField)
+        }
         if subrole == kAXSearchFieldSubrole { return rejected(.searchField) }
 
         let ancestry = try Ancestry(walkingUpFrom: AXDecode.element(attributes[kAXParentAttribute]))

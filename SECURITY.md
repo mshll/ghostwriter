@@ -21,7 +21,7 @@ You get a reply within a week. When a fix is released, the advisory is published
 ## In scope
 
 - Text that the user wrote leaves the Mac, or reaches logs or files that it should not
-- Text is recorded from secure fields, password managers or excluded apps
+- Text is recorded from secure fields, payment card or one-time code fields, password managers or excluded apps
 - Another process can make Ghostwriter type, read or run something
 - The update or model download accepts a file that is not the one published (signature or checksum bypass)
 
