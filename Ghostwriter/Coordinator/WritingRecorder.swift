@@ -54,8 +54,8 @@ final class WritingRecorder {
         writing[id]?.state.typed(count)
     }
 
-    func inserted(_ text: String, into field: FieldID) {
-        writing[field]?.state.inserted(text)
+    func inserted(_ text: String, into field: FieldID, after textBefore: String) {
+        writing[field]?.state.inserted(text, after: textBefore)
     }
 
     func finish() {

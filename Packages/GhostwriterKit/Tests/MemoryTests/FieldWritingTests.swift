@@ -32,8 +32,9 @@ private func shared(_ length: Int) -> String {
         var text = ""
         for word in reply.split(separator: " ") {
             writing.typed(1)
-            writing.inserted(String(word.dropFirst()) + " ")
-            text += word + " "
+            text += word.prefix(1)
+            writing.inserted(String(word.dropFirst()) + " ", after: text)
+            text += word.dropFirst() + " "
         }
         #expect(writing.excerpt(of: text) == nil)
     }
@@ -41,7 +42,7 @@ private func shared(_ length: Int) -> String {
     @Test func insertedTextIsLeftOutOfWhatIsStored() {
         var writing = FieldWriting(baseline: "")
         writing.typed(reply.count)
-        writing.inserted(" " + draft)
+        writing.inserted(" " + draft, after: reply)
         writing.typed(otherReply.count + 1)
         let excerpt = writing.excerpt(of: reply + " " + draft + "\n" + otherReply)
         #expect(excerpt == reply + "\n" + otherReply)
@@ -50,10 +51,19 @@ private func shared(_ length: Int) -> String {
     @Test func wordsAcceptedOneAfterAnotherAreLeftOutTogether() {
         var writing = FieldWriting(baseline: "")
         writing.typed(reply.count)
-        for word in ["We ", "should ", "meet ", "again ", "soon."] { writing.inserted(word) }
+        for word in ["We ", "should ", "meet ", "again ", "soon."] { writing.inserted(word, after: reply + " ") }
         writing.typed(otherReply.count + 1)
         let excerpt = writing.excerpt(of: reply + " We should meet again soon.\n" + otherReply)
         #expect(excerpt == reply + " \n" + otherReply)
+    }
+
+    @Test func wordsOfARunTheUserEditedAreLeftOutOneByOne() {
+        var writing = FieldWriting(baseline: "")
+        writing.typed(reply.count)
+        for word in ["We ", "should ", "meet ", "again ", "soon."] { writing.inserted(word, after: reply + " ") }
+        writing.typed(otherReply.count + 5)
+        let excerpt = writing.excerpt(of: reply + " We should talk again soon.\n" + otherReply)
+        #expect(excerpt == reply + " talk \n" + otherReply)
     }
 
     @Test func textAroundTheEditThatTheUserDidNotChangeIsLeftOut() {
@@ -98,5 +108,50 @@ private func shared(_ length: Int) -> String {
         #expect(writing.excerpt(of: reply) == nil)
         writing.typed(otherReply.count + 1)
         #expect(writing.excerpt(of: reply + "\n" + otherReply) == reply + "\n" + otherReply)
+    }
+
+    @Test func aShortAcceptedWordIsLeftOut() {
+        var writing = FieldWriting(baseline: "")
+        writing.typed(reply.count)
+        writing.inserted(" soon", after: reply)
+        writing.typed(otherReply.count + 1)
+        #expect(writing.excerpt(of: reply + " soon\n" + otherReply) == reply + "\n" + otherReply)
+    }
+
+    @Test func aRepeatedWordIsLeftOutWhereItWasInserted() {
+        let before = "We went through the forecast with the team and "
+        let after = "budget for the second quarter, and the numbers look right to the finance team now."
+        var writing = FieldWriting(baseline: "")
+        writing.typed(before.count)
+        writing.inserted("the ", after: before)
+        writing.typed(after.count)
+        #expect(writing.excerpt(of: before + "the " + after) == before + after)
+    }
+
+    @Test func aReadThatMissesTheLastTypedKeysStillFindsTheInsertion() {
+        let before = "We went through the forecast with the team and "
+        let after = "budget for the second quarter, and the numbers look right to the finance team now."
+        var writing = FieldWriting(baseline: "")
+        writing.typed(before.count)
+        writing.inserted("the ", after: String(before.dropLast(4)))
+        writing.typed(after.count)
+        #expect(writing.excerpt(of: before + "the " + after) == before + after)
+    }
+
+    @Test func aWordAcceptedAtTheStartOfTheFieldIsLeftOut() {
+        var writing = FieldWriting(baseline: "")
+        writing.inserted("Thanks ", after: "")
+        writing.typed(reply.count)
+        #expect(writing.excerpt(of: "Thanks " + reply) == reply)
+    }
+
+    @Test func anInsertionThatCannotBeLocatedStoresNothing() {
+        let before = "We went through the forecast with the team and "
+        let after = "budget for the second quarter, and the numbers look right to the finance team now."
+        var writing = FieldWriting(baseline: "")
+        writing.typed(before.count)
+        writing.inserted("the ", after: "Some text that the user later rewrote completely, ")
+        writing.typed(after.count)
+        #expect(writing.excerpt(of: before + "the " + after) == nil)
     }
 }

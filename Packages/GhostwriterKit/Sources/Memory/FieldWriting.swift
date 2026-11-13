@@ -1,19 +1,35 @@
 import Foundation
 
 /// What the user wrote in one field since it was first focused: the lines that changed, without text
-/// Ghostwriter inserted. Holds counts and Ghostwriter's own insertions, never the typed keys.
+/// Ghostwriter inserted. Holds the field's text at focus, counts of typed keys, and Ghostwriter's own
+/// insertions with the characters just before each.
 public struct FieldWriting: Sendable {
     public static let minimumTyped = 20
     public static let minimumLength = WritingSession.minimumCharacters
     public static let maximumLength = 8_000
     static let contextLength = 1_000
-    static let removableLength = 12
     static let wordBoundarySearch = 64
+    /// An insertion found more than once is told apart by the `anchorLength` characters before it,
+    /// which a field read that lags behind the last typed keys places up to `anchorSlack` characters early.
+    static let anchorLength = 24
+    static let anchorSlack = 16
+
+    struct Insertion {
+        var text: String
+        var before: String
+        var startsField: Bool
+    }
+
+    enum Location {
+        case found(Range<String.Index>)
+        case missing
+        case ambiguous
+    }
 
     private let baseline: String
     private var typedTotal = 0
     private var typedSinceFocus = 0
-    private var insertionRuns: [[String]] = []
+    private var insertionRuns: [[Insertion]] = []
     private var lastWasInsertion = false
 
     public init(baseline: String) {
@@ -33,27 +49,105 @@ public struct FieldWriting: Sendable {
         lastWasInsertion = false
     }
 
-    public mutating func inserted(_ text: String) {
-        if lastWasInsertion, !insertionRuns.isEmpty {
-            insertionRuns[insertionRuns.count - 1].append(text)
+    /// `textBefore` is the field's text before the caret where `text` went in.
+    public mutating func inserted(_ text: String, after textBefore: String) {
+        guard !text.isEmpty else { return }
+        if lastWasInsertion, let previous = insertionRuns.last?.last {
+            let next = Self.insertion(text, after: previous.before + previous.text, startsField: previous.startsField)
+            insertionRuns[insertionRuns.count - 1].append(next)
         } else {
-            insertionRuns.append([text])
+            insertionRuns.append([Self.insertion(text, after: textBefore, startsField: true)])
         }
         lastWasInsertion = true
     }
 
-    /// The text to store for `text`, the field's current contents, or nil when the user did not write enough of it.
+    private static func insertion(_ text: String, after textBefore: String, startsField: Bool) -> Insertion {
+        let cut = textBefore.index(textBefore.endIndex, offsetBy: -anchorLength, limitedBy: textBefore.startIndex)
+        return Insertion(
+            text: text,
+            before: String(textBefore[(cut ?? textBefore.startIndex)...]),
+            startsField: startsField && (cut ?? textBefore.startIndex) == textBefore.startIndex
+        )
+    }
+
+    /// The text to store for `text`, the field's current contents, or nil when the user did not write
+    /// enough of it or an insertion cannot be told apart from the user's own text.
     public func excerpt(of text: String) -> String? {
         guard typedSinceFocus >= Self.minimumTyped else { return nil }
-        var changed = Self.changedLines(from: baseline, to: text)
-        let notFound = insertionRuns.reduce(0) { $0 + Self.remove($1, from: &changed) }
-        guard notFound <= typedTotal else { return nil }
-        let excerpt = Self.tail(of: Self.droppingQuotedLines(changed))
+        let region = Self.changedRegion(from: baseline, to: text)
+        guard let inserted = insertedRanges(in: text, region: region) else { return nil }
+        let excerpt = Self.tail(of: Self.droppingQuotedLines(Self.removing(inserted, from: text, in: region)))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return excerpt.count >= Self.minimumLength ? excerpt : nil
     }
 
-    static func changedLines(from baseline: String, to text: String) -> String {
+    /// Finds a run of insertions as one span, else each insertion of the run on its own. Nil when an
+    /// insertion is found more than once and the text before it does not tell which, when two overlap,
+    /// or when the inserted text no longer found is longer than all the user typed.
+    private func insertedRanges(in text: String, region: Range<String.Index>) -> [Range<String.Index>]? {
+        var ranges: [Range<String.Index>] = []
+        var notFound = 0
+        for run in insertionRuns {
+            let whole = Insertion(text: run.map(\.text).joined(), before: run[0].before, startsField: run[0].startsField)
+            switch Self.locate(whole, in: text, region: region) {
+            case .found(let range):
+                ranges.append(range)
+                continue
+            case .ambiguous:
+                return nil
+            case .missing where run.count == 1:
+                notFound += whole.text.count
+                continue
+            case .missing:
+                break
+            }
+            for insertion in run {
+                switch Self.locate(insertion, in: text, region: region) {
+                case .found(let range): ranges.append(range)
+                case .ambiguous: return nil
+                case .missing: notFound += insertion.text.count
+                }
+            }
+        }
+        guard notFound <= typedTotal else { return nil }
+        ranges.sort { $0.lowerBound < $1.lowerBound }
+        guard zip(ranges, ranges.dropFirst()).allSatisfy({ $0.upperBound <= $1.lowerBound }) else { return nil }
+        return ranges
+    }
+
+    /// An insertion found more than once is the one nearest after its anchor.
+    static func locate(_ insertion: Insertion, in text: String, region: Range<String.Index>) -> Location {
+        let found = text[region].ranges(of: insertion.text)
+        guard found.count > 1 else { return found.first.map { .found($0) } ?? .missing }
+        let anchored = found.compactMap { range in lag(of: insertion, at: range.lowerBound, in: text).map { (range, $0) } }
+        guard let nearest = anchored.min(by: { $0.1 < $1.1 }),
+              anchored.count(where: { $0.1 == nearest.1 }) == 1 else { return .ambiguous }
+        return .found(nearest.0)
+    }
+
+    /// How many characters lie between the end of the insertion's anchor and `position`, if at most `anchorSlack`.
+    private static func lag(of insertion: Insertion, at position: String.Index, in text: String) -> Int? {
+        var end = position
+        for lag in 0...anchorSlack {
+            let before = text[..<end]
+            if insertion.startsField ? before == insertion.before : before.hasSuffix(insertion.before) { return lag }
+            guard end > text.startIndex else { return nil }
+            text.formIndex(before: &end)
+        }
+        return nil
+    }
+
+    private static func removing(_ ranges: [Range<String.Index>], from text: String, in region: Range<String.Index>) -> String {
+        var kept = ""
+        var start = region.lowerBound
+        for range in ranges {
+            kept += text[start..<range.lowerBound]
+            start = range.upperBound
+        }
+        return kept + text[start..<region.upperBound]
+    }
+
+    static func changedRegion(from baseline: String, to text: String) -> Range<String.Index> {
         let old = baseline.unicodeScalars
         let new = text.unicodeScalars
         var start = new.startIndex
@@ -71,8 +165,8 @@ public struct FieldWriting: Sendable {
             end = previous
             oldEnd = oldPrevious
         }
-        guard start < end else { return "" }
-        return String(Substring(new[lineStart(before: start, in: new)..<lineEnd(after: end, in: new)]))
+        guard start < end else { return start..<start }
+        return lineStart(before: start, in: new)..<lineEnd(after: end, in: new)
     }
 
     private static func lineStart(before index: String.Index, in scalars: String.UnicodeScalarView) -> String.Index {
@@ -99,19 +193,6 @@ public struct FieldWriting: Sendable {
             scalars.formIndex(before: &end)
         }
         return end
-    }
-
-    /// Removes a run of insertions as one span, else each long insertion on its own. Returns the length
-    /// of the inserted text it could not find.
-    private static func remove(_ run: [String], from text: inout String) -> Int {
-        if run.count > 1, removeLast(run.joined(), from: &text) { return 0 }
-        return run.reduce(0) { $0 + (removeLast($1, from: &text) ? 0 : $1.count) }
-    }
-
-    private static func removeLast(_ span: String, from text: inout String) -> Bool {
-        guard span.count >= removableLength, let range = text.range(of: span, options: .backwards) else { return false }
-        text.removeSubrange(range)
-        return true
     }
 
     private static func droppingQuotedLines(_ text: String) -> String {
