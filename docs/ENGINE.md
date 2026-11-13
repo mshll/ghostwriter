@@ -75,6 +75,8 @@ When the text before the caret is longer than its budget (350 tokens), its start
 
 **New context.** When window text or new examples arrive, the engine decodes the new prompt in a separate cache sequence while it continues to answer key presses with the old one. It switches to the new prompt when it is ready. While you type it decodes 32 tokens per unit, so a key press waits at most for one small unit.
 
+**Warm-up.** After each load the engine runs a one-word search on a fixed prompt and discards it. The first decode after a load sets up the GPU's work: without the warm-up, the first suggestion took 9 to 76 ms longer than the same request later, and with it at most 7 ms (`gw-eval --first-request`). The warm-up takes 120 to 200 ms; a request that arrives meanwhile waits for it.
+
 **Power.** On battery, in Low Power Mode, or when the Mac is hot, the engine works in economy mode: it does not follow your typing while a suggestion shows.
 
 ### 5. Display and accept

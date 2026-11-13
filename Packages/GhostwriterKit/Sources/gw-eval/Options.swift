@@ -5,7 +5,7 @@ import Memory
 import Prompting
 
 struct Options {
-    enum Task { case evaluate, bench, score, typing, swap, pause, typos, proofread, decodeCurve }
+    enum Task { case evaluate, bench, score, typing, swap, pause, typos, proofread, decodeCurve, firstRequest }
     enum Backend { case llama, foundation }
 
     var backend = Backend.llama
@@ -46,6 +46,7 @@ struct Options {
     var ranking = ExampleRanking()
     var curveTokens = 16
     var curveRepeats = 9
+    var warmUp = false
 
     /// The app's word cap for drafts; the default for `--mode draft`.
     static let draftWords = 80
@@ -76,6 +77,8 @@ struct Options {
                gw-eval --proofread <jsonl> [--limit N] [--verbose] [--json out.json]   (fix grammar with Apple's on-device model on sentence rows)
                gw-eval --decode-curve --set <jsonl> [--limit N (3)] [--curve-tokens N (16)] [--curve-repeats N (9)]
                        (GPU decode time by batch size after each row's prompt)
+               gw-eval --first-request --set <jsonl> [--limit N (5)] [--warm-up]
+                       (the first request after each model load against the same request repeated; --warm-up runs the engine's warm-up after each load)
                gw-eval --download <catalog id>
         variants: \(Variant.names.joined(separator: ", "))
         """
@@ -118,6 +121,8 @@ struct Options {
                 options.promptVariant = variant
             case "--bench": options.task = .bench
             case "--decode-curve": options.task = .decodeCurve
+            case "--first-request": options.task = .firstRequest
+            case "--warm-up": options.warmUp = true
             case "--curve-tokens":
                 let x: Int = try number(flag)
                 guard x > 0 else { throw UsageError("--curve-tokens must be above 0") }

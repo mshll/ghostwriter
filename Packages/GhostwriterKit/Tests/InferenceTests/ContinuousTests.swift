@@ -203,6 +203,26 @@ import Testing
         return false
     }
 
+    @Test func warmUpDecodesAndLeavesNothingCached() async throws {
+        let toy = await ToyEngine.make()
+        await toy.engine.warmUp()
+        #expect(toy.context.decodeCalls > 0)
+        #expect(toy.context.sequences.isEmpty)
+        let result = try final(await toy.settle(.toy("i saw the")))
+        let fresh = try final(await ToyEngine.make().settle(.toy("i saw the")))
+        #expect(result.candidates.map(\.text) == fresh.candidates.map(\.text))
+    }
+
+    @Test func cancelledWarmUpDecodesNothing() async {
+        let toy = await ToyEngine.make()
+        await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            await toy.engine.warmUp()
+        }.value
+        #expect(toy.context.decodeCalls == 0)
+        #expect(toy.context.sequences.isEmpty)
+    }
+
     @Test func aStagedPromptIsTakenOverWithoutDecodingItAgain() async throws {
         let toy = await ToyEngine.make()
         _ = await toy.settle(.toy("i saw the "))

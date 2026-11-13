@@ -205,6 +205,28 @@ public actor CompletionEngine {
         }
     }
 
+    /// Runs a short search on a fixed prompt and discards it, so the GPU's first decodes after a load are not paid
+    /// by the first suggestion. Leaves the cache empty.
+    public func warmUp() {
+        guard let session else { return }
+        scheduler?.reset()
+        abort.begin(abort.ticket)
+        var stats = GenerationStats()
+        do {
+            _ = try Self.run(Self.warmUpRequest, session: session, abort: abort, stats: &stats, onPartial: nil)
+        } catch is CancellationError {
+            log.info("Warm-up cancelled")
+        } catch {
+            log.error("Warm-up failed: \(error.localizedDescription, privacy: .public)")
+        }
+        session.clearCache()
+    }
+
+    private static let warmUpRequest = CompletionRequest(
+        prompt: "The meeting is moved to Thursday afternoon, so we can go over the notes from last week and plan the",
+        maxWords: 1
+    )
+
     public func clearCache() {
         scheduler?.reset()
         session?.clearCache()
