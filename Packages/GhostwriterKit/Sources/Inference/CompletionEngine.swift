@@ -28,6 +28,7 @@ public actor CompletionEngine {
     private nonisolated let draining = Atomic<Bool>(false)
     private nonisolated let submissions = Atomic<Int>(0)
     private nonisolated let stageBox = Mutex<StageRequest?>(nil)
+    private nonisolated let inPlaceStagings = Atomic<Int>(0)
     private var staging: (tokens: [Int32], continuation: CheckedContinuation<Bool, Never>?)?
     private var stagedInUnit = false
     private nonisolated let stepping: Stepping
@@ -90,6 +91,9 @@ public actor CompletionEngine {
     }
 
     public var isLoaded: Bool { session != nil }
+
+    /// Times a staged prompt did not fit beside the cached one and replaced it instead, since launch.
+    public nonisolated var inPlaceStagingCount: Int { inPlaceStagings.load(ordering: .relaxed) }
 
     public nonisolated var tokenizer: (any TokenCounting)? { tokenizerSlot.withLock { $0 } }
 
@@ -159,6 +163,10 @@ public actor CompletionEngine {
             case .done:
                 break
             case .noRoom:
+                let count = inPlaceStagings.add(1, ordering: .relaxed).newValue
+                log.info(
+                    "No room to stage beside the cached prompt (\(session.promptLength, privacy: .public) cached + \(current.tokens.count, privacy: .public) new tokens, context \(session.context.contextSize, privacy: .public)); decoding in place, \(count, privacy: .public) so far"
+                )
                 scheduler?.reset()
                 guard try session.prefillChunk(current.tokens, abort: abort) else { return true }
             }

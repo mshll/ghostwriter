@@ -8,7 +8,7 @@ struct AboutPane: View {
 
     @Environment(Preferences.self) private var preferences
     @Environment(AppState.self) private var appState
-    @Environment(ModelLibrary.self) private var models
+    @Environment(AppServices.self) private var services
     @State private var copied: String?
 
     var body: some View {
@@ -34,7 +34,7 @@ struct AboutPane: View {
                 }
                 SettingRow(AboutSetting.diagnostics) {
                     copyButton("Diagnostics") {
-                        Diagnostics.report(preferences: preferences, appState: appState, models: models)
+                        Diagnostics.report(preferences: preferences, appState: appState, services: services)
                     }
                 }
             } header: {

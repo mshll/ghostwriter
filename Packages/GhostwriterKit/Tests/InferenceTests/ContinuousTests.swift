@@ -239,6 +239,16 @@ import Testing
         #expect(toy.context.decodedTokens - tokens < fresh.context.decodedTokens - 5)
     }
 
+    @Test func aPromptWithNoRoomBesideTheCachedOneIsCounted() async throws {
+        let toy = await ToyEngine.make()
+        _ = await toy.settle(.toy(String(repeating: "i saw the cat ", count: 500)))
+        #expect(toy.engine.inPlaceStagingCount == 0)
+        let staged = Task { await toy.engine.stage(prompt: String(repeating: "a red car and then ", count: 400)) }
+        #expect(await runUntilStaged(toy))
+        #expect(await staged.value)
+        #expect(toy.engine.inPlaceStagingCount == 1)
+    }
+
     @Test func requestsOnTheOldPromptGoFirstWhileAPromptIsStaged() async throws {
         let toy = await ToyEngine.make()
         _ = await toy.settle(.toy("i saw the "))
