@@ -54,7 +54,7 @@ struct Options {
         usage: gw-eval --set <jsonl> [--model <gguf>] [--variant <name>] [--beams N] [--top-k N] [--max-words N (inline: medium length, draft: 80)]
                        [--length-penalty X] [--floor X] [--confidence X] [--midline-confidence X] [--early-stop X] [--narrow-after N] [--narrow-stop P]
                        [--midline-bonus X] [--midline-margin X] [--midline-tokens N] [--midline-candidates N] [--no-echo-guard]
-                       [--midline-beams N (0: as --beams)] [--midline-rerank-every N (0: only when the search ends)] [--midline-budget N]
+                       [--midline-beams N (0: as --beams)]
                        [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--reverse-screen] [--screen-tokens N] [--total-tokens N] [--before-slack N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
                        [--first-shown]   (score the first suggestion streamed, not the final one)
                        [--history <jsonl>]   (writing history from eval/scripts/build_history_set.py: examples and word bias as in the app)
@@ -219,14 +219,6 @@ struct Options {
                 let x: Int = try number(flag)
                 guard x >= 0 else { throw UsageError("--midline-beams must be 0 or more") }
                 overrides.append { $0.midLineBeams = x == 0 ? nil : x }
-            case "--midline-rerank-every":
-                let x: Int = try number(flag)
-                guard x >= 0 else { throw UsageError("--midline-rerank-every must be 0 or more") }
-                overrides.append { $0.midLineRerankInterval = x }
-            case "--midline-budget":
-                let x: Int = try number(flag)
-                guard x > 0 else { throw UsageError("--midline-budget must be above 0") }
-                overrides.append { $0.midLineDecodeBudget = x }
             case "--midline-margin":
                 let x: Double = try number(flag)
                 overrides.append { $0.midLineMargin = x }

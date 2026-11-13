@@ -160,8 +160,6 @@ final class BeamSearch {
 
     var sequencesNeeded: Int { max(0, width - pending.count) }
 
-    var liveCount: Int { pending.count }
-
     @discardableResult
     func step(extra: [DecodeEntry] = []) throws -> Int {
         if abort.isCancelled || Task.isCancelled { throw CancellationError() }
