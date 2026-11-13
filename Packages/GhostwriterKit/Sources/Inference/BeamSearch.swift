@@ -97,7 +97,8 @@ final class BeamSearch {
         inline = request.mode == .inline
         self.parks = parks && inline
         let beams = min(max(request.beams, 1), session.maxBeams)
-        width = inline ? beams : min(beams, 2)
+        let midLineBeams = request.textAfter.isEmpty ? beams : min(beams, max(request.tuning.midLineBeams ?? beams, 1))
+        width = inline ? midLineBeams : min(beams, 2)
         topK = max(request.topK, 1)
         maxWords = Double(max(request.maxWords, 1))
         stopStrings = request.stopStrings.filter { !$0.isEmpty && !$0.hasPrefix("\n") }
@@ -158,6 +159,8 @@ final class BeamSearch {
     var batchRoom: Int { context.batchCapacity - pending.count }
 
     var sequencesNeeded: Int { max(0, width - pending.count) }
+
+    var liveCount: Int { pending.count }
 
     @discardableResult
     func step(extra: [DecodeEntry] = []) throws -> Int {

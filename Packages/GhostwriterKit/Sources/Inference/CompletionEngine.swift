@@ -225,6 +225,17 @@ public actor CompletionEngine {
         return try session.score(prompt: prompt, continuation: continuation, abort: abort)
     }
 
+    /// Decodes `prompt`, then times decodes of 1 through `maxTokens` tokens after it; for measuring the GPU cost curve.
+    public func decodeTimings(prompt: String, maxTokens: Int, repeats: Int, shapes: [DecodeShape]) throws -> [DecodeTiming] {
+        guard let session else { throw InferenceError.notLoaded }
+        scheduler?.reset()
+        abort.begin(abort.ticket)
+        var stats = GenerationStats()
+        let prepared = session.prepare(prompt: prompt, partialWord: "", stats: &stats)
+        try session.prefill(prepared.tokens, abort: abort, stats: &stats)
+        return try session.decodeTimings(maxTokens: maxTokens, repeats: repeats, shapes: shapes)
+    }
+
     public nonisolated func complete(
         _ request: CompletionRequest,
         onPartial: (@Sendable (String) -> Void)? = nil

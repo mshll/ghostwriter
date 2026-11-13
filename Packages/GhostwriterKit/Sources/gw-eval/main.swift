@@ -329,6 +329,7 @@ do {
         switch options.task {
         case .evaluate: try await evaluate(options, set: set)
         case .bench: try await bench(options, set: set)
+        case .decodeCurve: try await measureDecodeCurve(options, set: set)
         case .swap: try await simulateSwap(options, set: set, mode: options.swapMode)
         case .pause: try await simulatePause(options, set: set)
         case .score: try await score(options, set: set)

@@ -92,6 +92,7 @@ final class FakeContext: DecodeContext, @unchecked Sendable {
     private(set) var sequences: [Int32: [Int32]] = [:]
     private(set) var decodeCalls = 0
     private(set) var decodedTokens = 0
+    private(set) var decodeSizes: [Int] = []
     private var rows: UnsafeMutablePointer<Float>
     private var rowCount = 0
     private var outputRows: [Int: Int] = [:]
@@ -108,6 +109,7 @@ final class FakeContext: DecodeContext, @unchecked Sendable {
     func decode(_ entries: [DecodeEntry]) throws {
         decodeCalls += 1
         decodedTokens += entries.count
+        decodeSizes.append(entries.count)
         rowCount = 0
         outputRows = [:]
         for (index, entry) in entries.enumerated() {
