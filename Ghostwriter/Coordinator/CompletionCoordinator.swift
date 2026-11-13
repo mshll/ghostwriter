@@ -81,6 +81,7 @@ final class CompletionCoordinator {
     private var typoCheck: Task<Void, Never>?
     private var autoFixUndo: (field: FieldID, edit: Proofread, word: String, expiry: Task<Void, Never>)?
     private var lastProofreadPrewarm: ContinuousClock.Instant?
+    private var workspaceObserver: (any NSObjectProtocol)?
 
     init(preferences: Preferences, appState: AppState, services: AppServices, selectionActions: SelectionActionsController) {
         self.preferences = preferences
@@ -108,6 +109,7 @@ final class CompletionCoordinator {
         listenForShortcuts()
         followFeatureShortcuts()
         followPracticeField()
+        followActiveApp()
         startMonitorsWhenTrusted()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.startMonitorsWhenTrusted() }
@@ -121,6 +123,8 @@ final class CompletionCoordinator {
         tracker.stop()
         permissionTimer?.invalidate()
         shortcutTasks.forEach { $0.cancel() }
+        if let workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver) }
+        workspaceObserver = nil
     }
 
     // MARK: Monitors and shortcuts
@@ -150,6 +154,28 @@ final class CompletionCoordinator {
         } onChange: { [weak self] in
             Task { @MainActor in self?.followPracticeField() }
         }
+    }
+
+    private func followActiveApp() {
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let pid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+            MainActor.assumeIsolated { self?.appActivated(pid) }
+        }
+    }
+
+    private func appActivated(_ pid: pid_t?) {
+        guard let field, pid != field.app.pid else { return }
+        fieldAppLeft()
+    }
+
+    /// The field keeps its focus while another app is in front, but keys pressed now go to that app.
+    private func fieldAppLeft() {
+        clearAutoFixUndo()
+        endDeleting()
+        hideAll()
+        cancelGeneration()
     }
 
     private func startMonitorsWhenTrusted() {
@@ -324,6 +350,7 @@ final class CompletionCoordinator {
             lastTyping = .now
             typedSinceRead += event.characters
             typedTail = String((typedTail + event.characters).suffix(64))
+            recorder.typed(event.characters.count)
             charactersSinceExamples += event.characters.count
             followTypedCharacters(event.characters)
             expandSnippetIfNeeded()
@@ -343,6 +370,7 @@ final class CompletionCoordinator {
         case .returnKey, .tab:
             typedTail = ""
             editedSinceRead = true
+            hideSuggestion()
             scheduleRefresh()
         case .escape:
             proofreading?.cancel()
@@ -404,6 +432,7 @@ final class CompletionCoordinator {
 
     private func pointerMoved() {
         pointerMovedLast = true
+        clearAutoFixUndo()
         endDeleting()
         guard field != nil else { return }
         typedTail = ""
@@ -851,10 +880,22 @@ final class CompletionCoordinator {
         for key in registeredKeys.subtracting(wanted) {
             hotKeys.unregister(key)
         }
-        for (key, action) in bindings where !hotKeys.register(key, action: action) {
+        for (key, action) in bindings where !hotKeys.register(key, action: { [weak self] in self?.pressed(key, action) }) {
             Self.log.error("Registering hot key \(key.keyCode) failed")
         }
         registeredKeys = wanted
+    }
+
+    /// Registered keys never reach `handleKey`, so each press clears what any other key press clears there.
+    /// Hot keys fire in whichever app is in front: a press there acts on the field only if that app owns it.
+    private func pressed(_ key: HotKey, _ action: () -> Void) {
+        if let front = NSWorkspace.shared.frontmostApplication?.processIdentifier, let field, front != field.app.pid {
+            fieldAppLeft()
+            TextInserter.post(key, to: front)
+            return
+        }
+        if key != .deleteBackward { clearAutoFixUndo() }
+        action()
     }
 
     private func acceptWord() {
@@ -954,6 +995,7 @@ final class CompletionCoordinator {
         let mode: InsertionMode = text.contains(where: \.isNewline) ? .paste : rule(for: snapshot).insertionMode ?? .standard
         let pid = snapshot.app.pid
         enqueueInsertion { await TextInserter.insert(text, into: pid, mode: mode) }
+        recorder.inserted(text, into: snapshot.id)
         recordAcceptance(of: text, kind: kind, bundleID: snapshot.app.bundleID)
     }
 
@@ -1157,13 +1199,25 @@ final class CompletionCoordinator {
     }
 
     private func undoAutoFix() {
-        guard let undo = autoFixUndo, let snapshot = field, snapshot.id == undo.field else { return }
+        guard let undo = autoFixUndo, let snapshot = field else { return }
         clearAutoFixUndo()
+        guard snapshot.id == undo.field,
+              undo.edit.canRevert(textBefore: snapshot.textBefore + typedSinceRead, selectedText: snapshot.selectedText)
+        else {
+            Self.log.info("Typo fix undo skipped: the text moved")
+            passDeleteBackward(to: snapshot.app.pid)
+            return
+        }
         hideAll()
         cancelGeneration()
         apply(undo.edit.reverted, in: snapshot)
         preferences.ignoreTypo(undo.word)
         showNotice("Kept \u{201C}\(undo.word)\u{201D}", in: snapshot)
+    }
+
+    private func passDeleteBackward(to pid: pid_t) {
+        enqueueInsertion { await TextInserter.deleteBackward(count: 1, in: pid) }
+        handleKey(KeyEvent(kind: .deleteBackward, keyCode: UInt16(HotKey.deleteBackward.keyCode), modifiers: 0, characters: ""))
     }
 
     private func clearAutoFixUndo() {
@@ -1270,6 +1324,7 @@ final class CompletionCoordinator {
             await TextInserter.insert(expansion.text, into: pid, mode: mode)
             await TextInserter.moveCaretLeft(count: expansion.cursorOffsetFromEnd, in: pid)
         }
+        recorder.inserted(expansion.text, into: snapshot.id)
         recordAcceptance(of: expansion.text, kind: .snippet, bundleID: snapshot.app.bundleID)
     }
 
@@ -1366,6 +1421,7 @@ final class CompletionCoordinator {
             }
             await TextInserter.insert(text, into: pid, mode: mode)
         }
+        recorder.inserted(text, into: snapshot.id)
         recordAcceptance(of: text, kind: .action, bundleID: snapshot.app.bundleID)
     }
 

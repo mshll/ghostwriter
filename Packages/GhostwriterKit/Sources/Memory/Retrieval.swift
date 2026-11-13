@@ -1,10 +1,15 @@
 import Foundation
 import GRDB
 
+public struct ExampleRanking: Sendable, Hashable {
+    public var sameAppBoost = 1.5
+    public var recencyBoost = 0.2
+
+    public init() {}
+}
+
 extension MemoryStore {
     static let minimumExampleLength = 100
-    static let sameAppBoost = 1.5
-    static let recencyBoost = 0.2
     static let recencyHalfLife: TimeInterval = 30 * 24 * 3_600
 
     struct Hit {
@@ -15,13 +20,8 @@ extension MemoryStore {
     }
 
     public func examples(
-        query: String, bundleID: String, language: String?, limit: Int, excludingKey: String?
-    ) throws -> [String] {
-        try examples(query: query, bundleID: bundleID, language: language, limit: limit, excludingKey: excludingKey, now: .now)
-    }
-
-    func examples(
-        query: String, bundleID: String, language: String?, limit: Int, excludingKey: String?, now: Date
+        query: String, bundleID: String, language: String?, limit: Int, excludingKey: String?, now: Date = .now,
+        ranking: ExampleRanking = ExampleRanking()
     ) throws -> [String] {
         guard limit > 0 else { return [] }
         let terms = SearchTerms(query: query)
@@ -29,7 +29,7 @@ extension MemoryStore {
         var hits: [Hit] = []
         if !terms.isEmpty {
             hits = try matches(for: terms, language: language, excludingKey: excludingKey, limit: candidates)
-            hits = Self.rank(hits, bundleID: bundleID, now: now)
+            hits = Self.rank(hits, bundleID: bundleID, now: now, ranking: ranking)
         }
         if hits.isEmpty {
             hits = try recent(bundleID: bundleID, language: language, excludingKey: excludingKey, limit: candidates)
@@ -84,11 +84,11 @@ extension MemoryStore {
         }
     }
 
-    static func rank(_ hits: [Hit], bundleID: String, now: Date) -> [Hit] {
+    static func rank(_ hits: [Hit], bundleID: String, now: Date, ranking: ExampleRanking = ExampleRanking()) -> [Hit] {
         func score(_ hit: Hit) -> Double {
             let age = max(0, now.timeIntervalSince(hit.updatedAt))
-            let recency = 1 + recencyBoost * exp2(-age / recencyHalfLife)
-            return hit.relevance * (hit.bundleID == bundleID ? sameAppBoost : 1) * recency
+            let recency = 1 + ranking.recencyBoost * exp2(-age / recencyHalfLife)
+            return hit.relevance * (hit.bundleID == bundleID ? ranking.sameAppBoost : 1) * recency
         }
         return hits
             .map { (hit: $0, score: score($0)) }

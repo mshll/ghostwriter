@@ -26,6 +26,11 @@ public struct Proofread: Sendable, Hashable {
 
     public var reverted: Proofread { Proofread(original: corrected, corrected: original) }
 
+    /// `reverted` deletes backward from the caret, so it applies only while the correction ends the text there.
+    public func canRevert(textBefore: String, selectedText: String) -> Bool {
+        selectedText.isEmpty && textBefore.hasSuffix(corrected)
+    }
+
     public var isUnchanged: Bool { original == corrected }
 
     /// Counted in grapheme clusters: one Backspace press each.

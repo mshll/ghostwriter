@@ -99,7 +99,7 @@ private struct ClockedRow {
             keystrokes: 0, shown: 0, used: 0, shownReused: 0, busy: 0, elapsed: 0, units: 0, requests: 0
         )
         await engine.clearCache()
-        _ = engine.suggestions(for: harness.request(for: row, before: String(row.before.dropLast())))
+        _ = engine.suggestions(for: try harness.request(for: row, before: String(row.before.dropLast())))
         while await engine.runUnit() != nil {}
 
         var typed = 0
@@ -130,15 +130,15 @@ private struct ClockedRow {
         var latest: Int?
         var settles: [(time: Double, publication: Publication)] = []
 
-        func submit(at time: Double) {
-            let subscription = engine.suggestions(for: harness.request(for: row, before: row.before + String(target[..<typed])))
+        func submit(at time: Double) throws {
+            let subscription = engine.suggestions(for: try harness.request(for: row, before: row.before + String(target[..<typed])))
             requests[subscription.id] = (typed, time)
             latest = subscription.id
             inFlight = subscription.id
             result.requests += 1
         }
 
-        func apply(_ publication: Publication, at time: Double) {
+        func apply(_ publication: Publication, at time: Double) throws {
             guard let issued = requests[publication.request] else { return }
             if publication.update.isFinal, inFlight == publication.request { inFlight = nil }
             let typedSince = String(target[issued.typed..<typed])
@@ -146,7 +146,7 @@ private struct ClockedRow {
             if candidates.isEmpty {
                 if mode == .oneshot, visible.isEmpty, inFlight == nil, followUp || typed > issued.typed {
                     followUp = false
-                    submit(at: time)
+                    try submit(at: time)
                 }
                 return
             }
@@ -190,23 +190,23 @@ private struct ClockedRow {
             }
         }
 
-        func deliver(until time: Double) {
+        func deliver(until time: Double) throws {
             let settled = settles.filter { $0.time <= time && $0.publication.request == latest }
             settles.removeAll { $0.time <= time || $0.publication.request != latest }
             let due = (pending.filter { $0.time <= time } + settled).sorted { $0.time < $1.time }
             pending.removeAll { $0.time <= time }
-            for (time, publication) in due { apply(publication, at: time) }
+            for (time, publication) in due { try apply(publication, at: time) }
         }
 
-        submit(at: clock)
+        try submit(at: clock)
         while typed < target.count {
             if interval != nil {
                 if readSubmits, clock >= nextRead {
                     readSubmits = false
-                    if mode == .continuous || visible.isEmpty { submit(at: nextRead) }
+                    if mode == .continuous || visible.isEmpty { try submit(at: nextRead) }
                 }
                 if clock < nextKeystroke {
-                    deliver(until: clock)
+                    try deliver(until: clock)
                     guard let unit = await engine.runUnit() else {
                         clock = readSubmits ? min(nextKeystroke, nextRead) : nextKeystroke
                         continue
@@ -217,13 +217,13 @@ private struct ClockedRow {
                     pending += unit.publications.map { (clock, $0) }
                     continue
                 }
-                deliver(until: nextKeystroke)
+                try deliver(until: nextKeystroke)
             } else {
                 while let unit = await engine.runUnit() {
                     clock += unit.milliseconds
                     result.busy += unit.milliseconds
                     result.units += 1
-                    for publication in unit.publications { apply(publication, at: clock) }
+                    for publication in unit.publications { try apply(publication, at: clock) }
                 }
                 nextKeystroke = clock
             }
@@ -262,14 +262,14 @@ private struct ClockedRow {
             let atRead = readLag > 0 && accepted == nil
             switch mode {
             case .continuous:
-                if atRead { readSubmits = true } else { submit(at: keystrokeTime) }
+                if atRead { readSubmits = true } else { try submit(at: keystrokeTime) }
             case .economy:
                 if visible.isEmpty {
-                    if atRead { readSubmits = true } else { submit(at: keystrokeTime) }
+                    if atRead { readSubmits = true } else { try submit(at: keystrokeTime) }
                 }
             case .oneshot:
                 if visible.isEmpty {
-                    if inFlight == nil { submit(at: keystrokeTime) } else { followUp = true }
+                    if inFlight == nil { try submit(at: keystrokeTime) } else { followUp = true }
                 }
             }
         }

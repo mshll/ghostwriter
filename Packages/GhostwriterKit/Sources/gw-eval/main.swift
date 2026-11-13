@@ -1,6 +1,7 @@
 import Foundation
 import GWCore
 import Inference
+import Memory
 import Prompting
 import Synchronization
 
@@ -15,6 +16,10 @@ struct Row: Decodable {
     var lang: String?
     var source: String?
     var screen: String?
+    var bundle: String?
+    var domain: String?
+    var label: String?
+    var date: Date?
 }
 
 struct Report: Encodable {
@@ -47,12 +52,17 @@ func clip(_ text: String, _ width: Int) -> String {
     return flat.count > width ? String(flat.prefix(width - 1)) + "…" : flat
 }
 
-func loadRows(from url: URL, limit: Int?) throws -> [Row] {
+func decodeLines<Value: Decodable>(_ type: Value.Type, from url: URL) throws -> [Value] {
     let decoder = JSONDecoder()
-    let rows = try String(contentsOf: url, encoding: .utf8)
+    decoder.dateDecodingStrategy = .iso8601
+    return try String(contentsOf: url, encoding: .utf8)
         .split(whereSeparator: \.isNewline)
         .filter { !$0.allSatisfy(\.isWhitespace) }
-        .map { try decoder.decode(Row.self, from: Data($0.utf8)) }
+        .map { try decoder.decode(type, from: Data($0.utf8)) }
+}
+
+func loadRows(from url: URL, limit: Int?) throws -> [Row] {
+    let rows = try decodeLines(Row.self, from: url)
     return limit.map { Array(rows.prefix($0)) } ?? rows
 }
 
@@ -73,6 +83,7 @@ struct Harness {
     var engine: CompletionEngine
     var builder: PromptBuilder
     var options: Options
+    var personalization: Personalization?
 
     static func load(_ options: Options, stepping: CompletionEngine.Stepping = .automatic) async throws -> Harness {
         let engine = CompletionEngine(stepping: stepping)
@@ -82,20 +93,21 @@ struct Harness {
         guard let tokenizer = engine.tokenizer else { throw InferenceError.notLoaded }
         var builder = PromptBuilder(counter: tokenizer, budgets: options.budgets)
         builder.includeAfterText = options.afterSection
-        return Harness(engine: engine, builder: builder, options: options)
+        return Harness(engine: engine, builder: builder, options: options, personalization: try options.personalization())
     }
 
-    func request(for row: Row, before: String, screenText: String? = nil) -> CompletionRequest {
+    func request(for row: Row, before: String, screenText: String? = nil) throws -> CompletionRequest {
         let after = row.after ?? ""
         let built = builder.build(PromptContext(
-            appName: row.app ?? "TextEdit", fieldKind: FieldKind(rawValue: row.kind ?? "") ?? .unknown, now: fixedNow,
+            appName: row.app ?? "TextEdit", domain: row.domain, fieldKind: FieldKind(rawValue: row.kind ?? "") ?? .unknown,
+            fieldLabel: row.label, now: fixedNow, examples: try personalization?.examples(for: row) ?? [],
             screenText: screenText ?? (options.screen ? rowScreen(row) : nil), textBefore: before, textAfter: after, mode: options.draft ? .draft : .inline
         ))
         let prompt = options.promptVariant.apply(to: built.text, before: String(before.dropLast(built.partialWord.count)))
         return CompletionRequest(
             prompt: prompt, partialWord: built.partialWord, textAfter: String(after.prefix { !$0.isNewline }),
             maxWords: options.maxWords, mode: options.draft ? .draft : .inline, beams: options.beams, topK: options.topK,
-            tuning: options.tuning, stopStrings: options.stopStrings ? BuiltPrompt.stopStrings : []
+            bias: try personalization?.bias(language: built.language), tuning: options.tuning, stopStrings: options.stopStrings ? BuiltPrompt.stopStrings : []
         )
     }
 
@@ -133,7 +145,7 @@ func evaluate(_ options: Options, set: URL) async throws {
     var draftsStreamed = 0
     var draftsExtended = 0
     for row in rows {
-        let coldRequest = harness.request(for: row, before: row.before)
+        let coldRequest = try harness.request(for: row, before: row.before)
         await harness.engine.clearCache()
         let partials = Mutex<[String]>([])
         let cold = options.firstShown && !options.draft
@@ -238,7 +250,7 @@ func bench(_ options: Options, set: URL) async throws {
 
         let typed = Array(row.truth ?? "").prefix(10)
         for count in 1...max(typed.count, 1) {
-            let request = harness.request(for: row, before: row.before + String(typed.prefix(count)), screenText: screen)
+            let request = try harness.request(for: row, before: row.before + String(typed.prefix(count)), screenText: screen)
             let result = try await harness.timed(request)
             steady.append(KeystrokeSample(milliseconds: result.milliseconds, stats: result.stats))
         }
@@ -246,7 +258,7 @@ func bench(_ options: Options, set: URL) async throws {
         var tasks: [(Task<[Candidate], any Error>, ContinuousClock.Instant)] = []
         for extra in 1...5 {
             harness.engine.cancel()
-            let request = harness.request(for: row, before: row.before + String(typed) + String(repeating: "x", count: extra), screenText: screen)
+            let request = try harness.request(for: row, before: row.before + String(typed) + String(repeating: "x", count: extra), screenText: screen)
             tasks.append((Task { try await harness.engine.complete(request) }, .now))
             try await Task.sleep(for: .milliseconds(3))
         }
@@ -262,7 +274,7 @@ func bench(_ options: Options, set: URL) async throws {
         for (phase, delay) in [(0, 300), (1, 40)] {
             let before = row.before + String(typed)
             if phase == 0 { await harness.engine.clearCache() } else { _ = try await harness.timed(harness.request(for: row, before: before, screenText: screen)) }
-            let request = harness.request(for: row, before: before + (phase == 0 ? "" : "e"), screenText: screen)
+            let request = try harness.request(for: row, before: before + (phase == 0 ? "" : "e"), screenText: screen)
             let task = Task { try await harness.engine.complete(request) }
             try await Task.sleep(for: .milliseconds(delay))
             let cancelledAt = ContinuousClock.now

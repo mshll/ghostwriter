@@ -83,11 +83,11 @@ private struct SwapRow {
         let engine = harness.engine
         let target = Array(folded(row.truth ?? ""))
         let screen = row.screen ?? ""
-        func request(typed: Int, new: Bool) -> CompletionRequest {
-            harness.request(for: row, before: row.before + String(target[..<typed]), screenText: new ? screen : "")
+        func request(typed: Int, new: Bool) throws -> CompletionRequest {
+            try harness.request(for: row, before: row.before + String(target[..<typed]), screenText: new ? screen : "")
         }
         await engine.clearCache()
-        for await _ in engine.suggestions(for: request(typed: 0, new: false)).updates {}
+        for await _ in engine.suggestions(for: try request(typed: 0, new: false)).updates {}
 
         let shown = Mutex<[Shown]>([])
         let ready = Mutex<Double?>(nil)
@@ -101,7 +101,7 @@ private struct SwapRow {
             if typed == swapAt, mode != .none {
                 swapStart = milliseconds(since: start)
                 if mode == .staged {
-                    let prompt = request(typed: typed, new: true).prompt
+                    let prompt = try request(typed: typed, new: true).prompt
                     staging = Task {
                         if await engine.stage(prompt: prompt) { ready.withLock { $0 = milliseconds(since: start) } }
                     }
@@ -113,7 +113,7 @@ private struct SwapRow {
             case .staged: ready.withLock { $0 != nil }
             }
             let building = ContinuousClock.now
-            let next = request(typed: typed, new: new)
+            let next = try request(typed: typed, new: new)
             buildMilliseconds.append(milliseconds(since: building))
             let subscription = engine.suggestions(for: next)
             listeners.append(Task {

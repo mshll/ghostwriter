@@ -64,7 +64,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "gw-eval",
-            dependencies: ["GWCore", "Inference", "Input", "Prompting", "Proofing", "Actions"],
+            dependencies: ["GWCore", "Inference", "Input", "Memory", "Prompting", "Proofing", "Actions"],
             swiftSettings: swift6
         ),
         .executableTarget(name: "gw-axprobe", dependencies: ["GWCore", "Capture"], swiftSettings: swift6),
@@ -84,5 +84,6 @@ let package = Package(
             dependencies: ["CotypistImport", "Memory", .product(name: "GRDB", package: "GRDB.swift")],
             swiftSettings: swift6
         ),
+        .testTarget(name: "EvalTests", dependencies: ["gw-eval", "Memory"], swiftSettings: swift6),
     ]
 )
