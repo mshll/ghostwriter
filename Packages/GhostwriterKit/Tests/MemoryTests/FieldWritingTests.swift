@@ -152,6 +152,27 @@ private func shared(_ length: Int) -> String {
         #expect(writing.excerpt(of: "Thanks " + reply) == reply)
     }
 
+    @Test func aCorrectionThatReplacedATypedWordIsLeftOut() {
+        let before = "We went through the forecast with the team and "
+        let after = "budget for the second quarter, and the numbers look right to the finance team now."
+        var writing = FieldWriting(baseline: "")
+        writing.typed(before.count + "teh ".count)
+        writing.inserted("the ", after: before)
+        writing.typed(after.count)
+        #expect(writing.excerpt(of: before + "the " + after) == before + after)
+    }
+
+    @Test func aCorrectionOverAnAcceptedWordLeavesOutBoth() {
+        let typed = "We went through the forecast with the team and agreed on teh"
+        var writing = FieldWriting(baseline: "")
+        writing.typed(typed.count)
+        writing.inserted(" budget", after: typed)
+        writing.inserted("the budget", after: "We went through the forecast with the team and agreed on ")
+        writing.typed(otherReply.count + 1)
+        let text = "We went through the forecast with the team and agreed on the budget\n" + otherReply
+        #expect(writing.excerpt(of: text) == "We went through the forecast with the team and agreed on \n" + otherReply)
+    }
+
     @Test func anInsertionThatCannotBeLocatedStoresNothing() {
         let before = "We went through the forecast with the team and "
         let after = "budget for the second quarter, and the numbers look right to the finance team now."

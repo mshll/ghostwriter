@@ -180,8 +180,7 @@ private struct AppRuleEditor: View {
             AppIconTile(image: AppInfo.icon(for: draft.bundleID), size: SettingsPaneIcon.compactSize)
         } content: {
             Section {
-                RuleChoice("Show suggestions", value: $draft.completionsEnabled,
-                           fallback: builtIn?.completionsEnabled ?? preferences.completionsEnabled)
+                RuleChoice("Show suggestions", value: $draft.completionsEnabled, fallback: builtIn?.completionsEnabled ?? true)
                 RuleChoice("Complete inside existing text", value: $draft.midLineEnabled,
                            fallback: builtIn?.midLineEnabled ?? preferences.midLineEnabled)
                 RuleChoice("Accept with Tab", value: $draft.tabAcceptEnabled,
@@ -193,8 +192,13 @@ private struct AppRuleEditor: View {
             } header: {
                 Text("Suggestions")
             } footer: {
-                if builtIn != nil {
-                    Text("Ghostwriter has built-in adjustments for this app. \u{201C}Default\u{201D} uses them.")
+                VStack(alignment: .leading, spacing: 4) {
+                    if !preferences.completionsEnabled {
+                        Text("Suggestions are off everywhere. Turn them on in Suggestions to use them here.")
+                    }
+                    if builtIn != nil {
+                        Text("Ghostwriter has built-in adjustments for this app. \u{201C}Default\u{201D} uses them.")
+                    }
                 }
             }
 

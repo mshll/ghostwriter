@@ -360,6 +360,13 @@ enum GhostLayout {
     }
 }
 
+/// Popups open below this rect, or above it at the bottom of the screen.
+public enum PopupAnchor {
+    public static func rect(for snapshot: FieldSnapshot) -> CGRect {
+        GhostLayout.drawsAtCaret(snapshot) ? snapshot.caretRect : snapshot.fieldFrame
+    }
+}
+
 enum PickerLayout {
     static let caretGap: CGFloat = 4
 

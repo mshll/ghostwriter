@@ -452,4 +452,29 @@ import Testing
         let overlay = GhostOverlay()
         #expect(!overlay.showTypoFix(word: "teh", closing: " ", correction: "the", for: snapshot(before: "Hello teh ")))
     }
+
+    @Test func popupAnchorIsTheCaretWhereGhostTextDrawsAtTheCaret() {
+        var exact = snapshot(before: "Hello there ")
+        exact.caretIsEstimated = false
+        #expect(PopupAnchor.rect(for: exact) == exact.caretRect)
+        let empty = snapshot(before: "")
+        #expect(PopupAnchor.rect(for: empty) == empty.caretRect)
+    }
+
+    @Test func popupAnchorIsTheFieldAtAnEstimatedCaretWithText() {
+        #expect(PopupAnchor.rect(for: snapshot(before: "Hello there ")) == field)
+        var selected = snapshot(before: "")
+        selected.selectedText = "all of it"
+        #expect(PopupAnchor.rect(for: selected) == field)
+    }
+
+    @Test func popupsAtAnEstimatedCaretStayOffTheField() {
+        let anchor = PopupAnchor.rect(for: snapshot(before: "Hello there "))
+        let size = CGSize(width: 120, height: 22)
+        #expect(!MarkLayout.status(size: size, caret: anchor, screen: screen).intersects(field))
+        #expect(!PickerLayout.frame(size: size, caret: anchor, screen: screen, titleInset: 8).intersects(field))
+        let low = CGRect(x: 100, y: 760, width: 400, height: 110)
+        #expect(!MarkLayout.status(size: size, caret: low, screen: screen).intersects(low))
+        #expect(!PickerLayout.frame(size: size, caret: low, screen: screen, titleInset: 8).intersects(low))
+    }
 }

@@ -111,9 +111,10 @@ public struct FieldWriting: Sendable {
         return typedInMessage >= min(Self.minimumTyped, message.count) ? message : ""
     }
 
-    /// Finds a run of insertions as one span, else each insertion of the run on its own. Nil when an
-    /// insertion is found more than once and the text before it does not tell which, when two overlap,
-    /// or when the inserted text no longer found is longer than all the user typed since the field was emptied.
+    /// Finds a run of insertions as one span, else each insertion of the run on its own. An insertion inside
+    /// another, such as a word that a later correction retyped, is part of it. Nil when an insertion is found
+    /// more than once and the text before it does not tell which, when two overlap in part, or when the inserted
+    /// text no longer found is longer than all the user typed since the field was emptied.
     private func insertedRanges(in text: String, region: Range<String.Index>) -> [Range<String.Index>]? {
         var ranges: [Range<String.Index>] = []
         var notFound = 0
@@ -140,9 +141,18 @@ public struct FieldWriting: Sendable {
             }
         }
         guard notFound <= typedInMessage else { return nil }
-        ranges.sort { $0.lowerBound < $1.lowerBound }
-        guard zip(ranges, ranges.dropFirst()).allSatisfy({ $0.upperBound <= $1.lowerBound }) else { return nil }
-        return ranges
+        ranges.sort { ($0.lowerBound, $1.upperBound) < ($1.lowerBound, $0.upperBound) }
+        var disjoint: [Range<String.Index>] = []
+        for range in ranges {
+            guard let last = disjoint.last else {
+                disjoint.append(range)
+                continue
+            }
+            if range.upperBound <= last.upperBound { continue }
+            guard last.upperBound <= range.lowerBound else { return nil }
+            disjoint.append(range)
+        }
+        return disjoint
     }
 
     /// An insertion found more than once is the one nearest after its anchor.

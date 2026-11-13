@@ -8,6 +8,15 @@ import Testing
         #expect(proofread.insertion == "eive the mail")
     }
 
+    @Test func replacementStartsAtTheFirstChangedWord() {
+        let proofread = Proofread(original: "I recieve teh mail", corrected: "I receive the mail")
+        #expect(proofread.replacement.text == "receive the mail")
+        #expect(proofread.replacement.deleteCount == 16)
+        let atWordStart = Proofread(original: "I got teh mail", corrected: "I got the mail")
+        #expect(atWordStart.replacement.text == "the mail")
+        #expect(atWordStart.replacement.deleteCount == 8)
+    }
+
     @Test func revertingRestoresTheOriginal() {
         let proofread = Proofread(original: "their going home", corrected: "they're going home")
         let reverted = proofread.reverted

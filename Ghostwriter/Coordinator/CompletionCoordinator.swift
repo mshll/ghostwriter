@@ -1176,7 +1176,7 @@ final class CompletionCoordinator {
         notice?.cancel()
         notice = nil
         overlay.hide()
-        return overlay.showStatus(text, detail: "\(key == .tab ? "⇥" : key.displayName) fixes", near: snapshot.caretRect)
+        return overlay.showStatus(text, detail: "\(key == .tab ? "⇥" : key.displayName) fixes", near: PopupAnchor.rect(for: snapshot))
     }
 
     private func acceptTypos() {
@@ -1194,6 +1194,7 @@ final class CompletionCoordinator {
         }
         let edit = Proofread(original: tail.original, corrected: tail.corrected)
         apply(edit, in: snapshot)
+        recordCorrection(edit, in: snapshot)
         return edit
     }
 
@@ -1281,7 +1282,8 @@ final class CompletionCoordinator {
             return false
         }
         emoji = (query, results.map(\.emoji))
-        overlay.showPicker(results.map { PickerItem(title: $0.emoji, detail: $0.name) }, near: snapshot.caretRect) { [weak self] index in
+        let items = results.map { PickerItem(title: $0.emoji, detail: $0.name) }
+        overlay.showPicker(items, near: PopupAnchor.rect(for: snapshot)) { [weak self] index in
             self?.pickEmoji(index)
         }
         var bindings: [(HotKey, @MainActor @Sendable () -> Void)] = []
@@ -1307,6 +1309,7 @@ final class CompletionCoordinator {
             await TextInserter.deleteBackward(count: length, in: pid)
             await TextInserter.insert(choice, into: pid, mode: mode)
         }
+        recorder.inserted(choice, into: snapshot.id, after: String(snapshot.textBefore.dropLast(length)))
         recordAcceptance(of: choice, kind: .emoji, bundleID: snapshot.app.bundleID)
     }
 
@@ -1397,7 +1400,7 @@ final class CompletionCoordinator {
                 NSSound.beep()
                 return
             }
-            self.showSelectionActions(for: snapshot, near: snapshot.caretRect, takesFocus: true)
+            self.showSelectionActions(for: snapshot, near: PopupAnchor.rect(for: snapshot), takesFocus: true)
         }
     }
 
@@ -1436,7 +1439,7 @@ final class CompletionCoordinator {
                   !self.selectionActions.isPresented
             else { return }
             self.autoShownSelection = selected
-            self.showSelectionActions(for: field, near: self.pointerMovedLast ? .zero : field.caretRect, takesFocus: false)
+            self.showSelectionActions(for: field, near: self.pointerMovedLast ? .zero : PopupAnchor.rect(for: field), takesFocus: false)
         }
     }
 
@@ -1534,8 +1537,10 @@ final class CompletionCoordinator {
             let corrected = result.corrected
             let mode = insertionMode(for: corrected, in: latest)
             enqueueInsertion { await TextInserter.insert(corrected, into: latest.app.pid, mode: mode) }
+            recorder.inserted(corrected, into: latest.id, after: latest.textBefore)
         } else {
             apply(result, in: latest)
+            recordCorrection(result, in: latest)
         }
         lastProofread = (latest.id, result)
         recordAcceptance(of: result.changes.map(\.new).joined(separator: " "), kind: .typo, bundleID: latest.app.bundleID)
@@ -1563,6 +1568,13 @@ final class CompletionCoordinator {
         }
     }
 
+    private func recordCorrection(_ proofread: Proofread, in snapshot: FieldSnapshot) {
+        let replacement = proofread.replacement
+        recorder.inserted(
+            replacement.text, into: snapshot.id, after: String(snapshot.textBefore.dropLast(replacement.deleteCount))
+        )
+    }
+
     private func insertionMode(for text: String, in snapshot: FieldSnapshot) -> InsertionMode {
         text.contains(where: \.isNewline) || text.count > 200 ? .paste : rule(for: snapshot).insertionMode ?? .standard
     }
@@ -1584,7 +1596,7 @@ final class CompletionCoordinator {
         for duration: Duration? = CompletionCoordinator.noticeDuration
     ) {
         notice?.cancel()
-        guard overlay.showStatus(text, detail: detail, busy: busy, near: snapshot.caretRect) else {
+        guard overlay.showStatus(text, detail: detail, busy: busy, near: PopupAnchor.rect(for: snapshot)) else {
             notice = nil
             return
         }

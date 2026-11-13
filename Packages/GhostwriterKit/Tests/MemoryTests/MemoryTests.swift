@@ -41,6 +41,29 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
         #expect(try store.examples(query: "ridge trail", bundleID: "com.apple.mail", language: nil, limit: 3, excludingKey: nil).isEmpty)
     }
 
+    @Test func writingCapturedBeforeAnEraseIsNotSaved() throws {
+        let store = try MemoryStore.inMemory()
+        let mark = store.erasureCount
+        try store.eraseWriting(bundleID: nil)
+        #expect(store.wasErased("com.apple.mail", since: mark))
+        try store.upsertSession(session("a", topics[0]), unlessErasedSince: mark)
+        #expect(try store.writingCount(bundleID: nil) == 0)
+        try store.upsertSession(session("a", topics[0]), unlessErasedSince: store.erasureCount)
+        #expect(try store.writingCount(bundleID: nil) == 1)
+    }
+
+    @Test func erasingOneAppKeepsWritingCapturedInOthers() throws {
+        let store = try MemoryStore.inMemory()
+        let mark = store.erasureCount
+        try store.eraseWriting(bundleID: "com.tinyspeck.slackmacgap")
+        #expect(store.wasErased("com.tinyspeck.slackmacgap", since: mark))
+        #expect(!store.wasErased("com.apple.mail", since: mark))
+        try store.upsertSession(session("a", topics[0], app: "com.tinyspeck.slackmacgap"), unlessErasedSince: mark)
+        try store.upsertSession(session("b", topics[1], app: "com.apple.mail"), unlessErasedSince: mark)
+        #expect(try store.writingCount(bundleID: nil) == 1)
+        #expect(try store.writingCount(bundleID: "com.apple.mail") == 1)
+    }
+
     @Test func eraseLeavesNoTraceInTheDatabaseFiles() throws {
         let folder = URL.temporaryDirectory.appending(path: "memory-tests-\(UUID().uuidString)", directoryHint: .isDirectory)
         defer {
