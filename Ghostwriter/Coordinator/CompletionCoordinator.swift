@@ -1026,7 +1026,7 @@ final class CompletionCoordinator {
         let mode: InsertionMode = text.contains(where: \.isNewline) ? .paste : rule(for: snapshot).insertionMode ?? .standard
         let pid = snapshot.app.pid
         enqueueInsertion { await TextInserter.insert(text, into: pid, mode: mode) }
-        recorder.inserted(text, into: snapshot.id)
+        recorder.inserted(text, into: snapshot.id, after: snapshot.textBefore)
         recordAcceptance(of: text, kind: kind, bundleID: snapshot.app.bundleID)
     }
 
@@ -1356,7 +1356,7 @@ final class CompletionCoordinator {
             await TextInserter.insert(expansion.text, into: pid, mode: mode)
             await TextInserter.moveCaretLeft(count: expansion.cursorOffsetFromEnd, in: pid)
         }
-        recorder.inserted(expansion.text, into: snapshot.id)
+        recorder.inserted(expansion.text, into: snapshot.id, after: String(snapshot.textBefore.dropLast(match.triggerLength)))
         recordAcceptance(of: expansion.text, kind: .snippet, bundleID: snapshot.app.bundleID)
     }
 
@@ -1454,7 +1454,7 @@ final class CompletionCoordinator {
             }
             await TextInserter.insert(text, into: pid, mode: mode)
         }
-        recorder.inserted(text, into: snapshot.id)
+        recorder.inserted(text, into: snapshot.id, after: snapshot.textBefore)
         recordAcceptance(of: text, kind: .action, bundleID: snapshot.app.bundleID)
     }
 

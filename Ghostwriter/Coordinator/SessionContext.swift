@@ -64,11 +64,14 @@ struct ContextRequest {
     static func examples(for snapshot: FieldSnapshot, limit: Int, excluding sessionKey: String?, memory: MemoryStore?) async -> [String] {
         guard let memory, limit > 0 else { return [] }
         let query = String(snapshot.textBefore.suffix(600))
+        let field = MemoryStore.fieldText(before: snapshot.textBefore, after: snapshot.textAfter)
         let language = LanguageDetector.dominantLanguage(of: query)
         let bundleID = snapshot.app.bundleID
         return await Task.detached {
             do {
-                return try memory.examples(query: query, bundleID: bundleID, language: language, limit: limit, excludingKey: sessionKey)
+                return try memory.examples(
+                    query: query, field: field, bundleID: bundleID, language: language, limit: limit, excludingKey: sessionKey
+                )
             } catch {
                 log.error("Fetching examples failed: \(error.localizedDescription, privacy: .public)")
                 return []
