@@ -51,6 +51,36 @@ import Testing
         #expect(SpellCheck.lastWord(in: "set snake_tomorow ", language: "en") == nil)
     }
 
+    @Test func anApostropheAfterALetterDoesNotFinishTheWord() {
+        #expect(!SpellCheck.finishesWord("it doesn'"))
+        #expect(!SpellCheck.finishesWord("it doesn\u{2019}"))
+        #expect(!SpellCheck.finishesWord("c'est aujourd'"))
+        #expect(SpellCheck.finishesWord("he said '"))
+        #expect(SpellCheck.finishesWord("مرحبا،"))
+    }
+
+    @Test func waitsForTheRestOfAContractionOrElision() {
+        #expect(SpellCheck.lastWord(in: "it doesn'", language: "en") == nil)
+        #expect(SpellCheck.lastWord(in: "it didn\u{2019}", language: "en") == nil)
+        #expect(SpellCheck.lastWord(in: "it isn'", language: "fr") == nil)
+        #expect(SpellCheck.lastWord(in: "c'est aujourd'", language: "fr") == nil)
+        #expect(SpellCheck.lastWord(in: "jusqu\u{2019}", language: "fr") == nil)
+    }
+
+    @Test func acceptsFinishedContractionsAndElisions() {
+        #expect(SpellCheck.lastWord(in: "it doesn't ", language: "en") == nil)
+        #expect(SpellCheck.lastWord(in: "it didn\u{2019}t,", language: "en") == nil)
+        #expect(SpellCheck.lastWord(in: "voir l'homme ", language: "fr") == nil)
+        #expect(SpellCheck.lastWord(in: "c'est aujourd\u{2019}hui ", language: "fr") == nil)
+    }
+
+    @Test func flagsATypoEndingInAnApostropheOnceTheWordEnds() throws {
+        #expect(SpellCheck.lastWord(in: "my frends'", language: "en") == nil)
+        let typo = try #require(SpellCheck.lastWord(in: "my frends' ", language: "en"))
+        #expect(typo.word == "frends")
+        #expect(typo.distanceFromEnd == 2)
+    }
+
     @Test func keepsApostrophesInsideWords() {
         let tokens = SpellCheck.tokens(in: Array("don't 'quote' it’s"))
         #expect(tokens.map(\.word) == ["don't", "quote", "it’s"])
