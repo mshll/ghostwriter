@@ -11,6 +11,8 @@ public struct ExampleRanking: Sendable, Hashable {
 extension MemoryStore {
     static let minimumExampleLength = 100
     static let recencyHalfLife: TimeInterval = 30 * 24 * 3_600
+    static let fieldReachBefore = 8_000
+    static let fieldReachAfter = 2_000
 
     struct Hit {
         var bundleID: String
@@ -19,8 +21,13 @@ extension MemoryStore {
         var relevance: Double
     }
 
+    /// The text around the caret that `examples` compares stored writing with, to leave out earlier copies of it.
+    public static func fieldText(before: String, after: String) -> String {
+        String(before.suffix(fieldReachBefore)) + String(after.prefix(fieldReachAfter))
+    }
+
     public func examples(
-        query: String, bundleID: String, language: String?, limit: Int, excludingKey: String?, now: Date = .now,
+        query: String, field: String = "", bundleID: String, language: String?, limit: Int, excludingKey: String?, now: Date = .now,
         ranking: ExampleRanking = ExampleRanking()
     ) throws -> [String] {
         guard limit > 0 else { return [] }
@@ -34,7 +41,9 @@ extension MemoryStore {
         if hits.isEmpty {
             hits = try recent(bundleID: bundleID, language: language, excludingKey: excludingKey, limit: candidates)
         }
-        return Passages.select(from: hits.map(\.text), terms: Set(terms.words), limit: limit)
+        let current = Shingles(field)
+        let texts = hits.lazy.map(\.text).filter { !current.overlapsHeavily($0) }
+        return Passages.select(from: texts, terms: Set(terms.words), limit: limit)
     }
 
     private func matches(for terms: SearchTerms, language: String?, excludingKey: String?, limit: Int) throws -> [Hit] {
@@ -126,6 +135,36 @@ struct SearchTerms {
     }
 }
 
+/// The word triples of a text, to tell an earlier copy of the text in the field from other writing.
+struct Shingles {
+    static let minimumShared = 8
+    static let heavyShare = 0.5
+
+    let hashes: Set<Int>
+
+    init(_ text: String) {
+        let words = Words.spans(in: Array(text)).map(\.word)
+        var hashes = Set<Int>()
+        for start in words.indices.dropLast(2) {
+            var hasher = Hasher()
+            hasher.combine(words[start])
+            hasher.combine(words[start + 1])
+            hasher.combine(words[start + 2])
+            hashes.insert(hasher.finalize())
+        }
+        self.hashes = hashes
+    }
+
+    /// Whether at least `heavyShare` of the triples of the shorter text appear in the other.
+    func overlapsHeavily(_ text: String) -> Bool {
+        guard hashes.count >= Self.minimumShared else { return false }
+        let other = Shingles(text).hashes
+        let (small, large) = hashes.count <= other.count ? (hashes, other) : (other, hashes)
+        let shared = small.count(where: large.contains)
+        return shared >= Self.minimumShared && Double(shared) >= Self.heavyShare * Double(small.count)
+    }
+}
+
 enum Passages {
     static let length = 400
     static let reach = 150
@@ -135,7 +174,7 @@ enum Passages {
     static let sentenceEnds: Set<Character> = [".", "!", "?", "…", "؟"]
     static let fullWidthSentenceEnds: Set<Character> = ["。", "！", "？"]
 
-    static func select(from texts: [String], terms: Set<String>, limit: Int) -> [String] {
+    static func select(from texts: some Sequence<String>, terms: Set<String>, limit: Int) -> [String] {
         var picked: [String] = []
         var pickedWords: [Set<String>] = []
         for text in texts {
