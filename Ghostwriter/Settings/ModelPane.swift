@@ -247,7 +247,7 @@ private struct ModelInUseRow: View {
             case .failed:
                 Label("Failed", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-            case .notInstalled:
+            case .notInstalled, .unloadedWhileOff:
                 EmptyView()
             }
         } label: {
@@ -262,6 +262,7 @@ private struct ModelInUseRow: View {
         case .notInstalled: "Download a model below to start getting suggestions."
         case .downloading: "Downloading the model\u{2026}"
         case .loading: "Loading the model\u{2026}"
+        case .unloadedWhileOff: "Unloaded while suggestions are off everywhere."
         case .ready: model.map { $0.summary.isEmpty ? "Writing your suggestions." : $0.summary } ?? "Writing your suggestions."
         case .failed(let message): "The model failed to load: \(message)"
         }

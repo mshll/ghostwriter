@@ -53,6 +53,7 @@ enum ModelStatus: Equatable {
     case downloading(progress: Double)
     case loading
     case ready(name: String)
+    case unloadedWhileOff
     case failed(message: String)
 }
 
@@ -145,7 +146,7 @@ final class AppState {
             issues.append(AttentionIssue(kind: .noModel, title: "No AI model installed yet", severity: .critical))
         case .failed(let message):
             issues.append(AttentionIssue(kind: .modelFailed, title: "The AI model failed to load: \(message)", severity: .critical))
-        case .downloading, .loading, .ready:
+        case .downloading, .loading, .ready, .unloadedWhileOff:
             break
         }
         if secureInputActive {

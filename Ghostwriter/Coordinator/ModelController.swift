@@ -29,7 +29,23 @@ final class ModelController {
         services.models.onActiveModelChange = { [weak self] _ in self?.reconcile() }
         watchMemoryPressure()
         followBatteryPreference()
+        followSuggestionSwitch()
         reconcile()
+    }
+
+    private var suggestionsOn: Bool {
+        SuggestionSwitch(preferences: preferences, appState: appState, appRules: services.appRules).isOnEverywhere
+    }
+
+    private func followSuggestionSwitch() {
+        withObservationTracking {
+            _ = suggestionsOn
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.reconcile()
+                self?.followSuggestionSwitch()
+            }
+        }
     }
 
     private func followBatteryPreference() {
@@ -58,20 +74,38 @@ final class ModelController {
     }
 
     func reconcile() {
-        let wanted = desiredModel()
+        let choice = ModelChoice.choose(
+            active: services.models.activeModel,
+            installed: services.models.models.filter(services.models.isInstalled),
+            suggestionsOn: suggestionsOn,
+            memoryIsCritical: memoryIsCritical,
+            prefersSmallest: power.isOnBattery && preferences.batterySmallerModel
+        )
+        switch choice {
+        case .unloadWhileOff:
+            appState.modelStatus = .unloadedWhileOff
+        case .unloadForMemory:
+            appState.modelStatus = .failed(message: "Unloaded while memory is low. It reloads when memory frees up.")
+        case .load, .noModel:
+            break
+        }
+        let wanted = choice.model
         guard wanted?.id != loadedID else { return }
-        loadTask?.cancel()
+        let previous = loadTask
+        previous?.cancel()
         builder = nil
         loadedID = wanted?.id
         guard let wanted else {
-            loadTask = Task { [engine = services.engine] in await engine.unload() }
-            if memoryIsCritical {
-                appState.modelStatus = .failed(message: "Unloaded while memory is low. It reloads when memory frees up.")
+            loadTask = Task { [engine = services.engine] in
+                await previous?.value
+                await engine.unload()
             }
             return
         }
         appState.modelStatus = .loading
         loadTask = Task { [weak self, engine = services.engine] in
+            await previous?.value
+            guard !Task.isCancelled else { return }
             do {
                 let info = try await engine.load(modelAt: wanted.localURL, config: EngineConfig())
                 guard !Task.isCancelled, let self else { return }
@@ -87,13 +121,5 @@ final class ModelController {
                 Self.log.error("Loading \(wanted.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
             }
         }
-    }
-
-    private func desiredModel() -> ModelSpec? {
-        guard !memoryIsCritical else { return nil }
-        let active = services.models.activeModel
-        guard power.isOnBattery, preferences.batterySmallerModel else { return active }
-        let installed = services.models.models.filter(services.models.isInstalled)
-        return installed.min { $0.sizeBytes < $1.sizeBytes } ?? active
     }
 }
