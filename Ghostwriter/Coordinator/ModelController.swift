@@ -8,6 +8,7 @@ final class ModelController {
     nonisolated private static let log = Logger.gw("ModelController")
 
     private(set) var builder: PromptBuilder?
+    var onReady: (() -> Void)?
 
     private let services: AppServices
     private let appState: AppState
@@ -115,6 +116,8 @@ final class ModelController {
                 self.appState.modelStatus = .ready(name: wanted.displayName)
                 Self.log.info("Loaded \(info.name, privacy: .public)")
                 await engine.warmUp()
+                guard !Task.isCancelled else { return }
+                self.onReady?()
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.loadedID = nil

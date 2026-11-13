@@ -213,6 +213,21 @@ import Testing
         #expect(result.candidates.map(\.text) == fresh.candidates.map(\.text))
     }
 
+    @Test func aPromptStagedAfterWarmUpIsTakenOverWithoutDecodingItAgain() async throws {
+        let toy = await ToyEngine.make()
+        await toy.engine.warmUp()
+        let staged = Task { await toy.engine.stage(prompt: "a cat sat on the") }
+        #expect(await runUntilStaged(toy))
+        #expect(await staged.value)
+
+        let tokens = toy.context.decodedTokens
+        let result = try final(await toy.settle(.toy("a cat sat on the ")))
+        let fresh = await ToyEngine.make()
+        let freshResult = try final(await fresh.settle(.toy("a cat sat on the ")))
+        #expect(result.candidates.first == freshResult.candidates.first)
+        #expect(toy.context.decodedTokens - tokens < fresh.context.decodedTokens - 5)
+    }
+
     @Test func cancelledWarmUpDecodesNothing() async {
         let toy = await ToyEngine.make()
         await Task {

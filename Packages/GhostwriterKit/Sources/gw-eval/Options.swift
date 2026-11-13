@@ -47,6 +47,7 @@ struct Options {
     var curveTokens = 16
     var curveRepeats = 9
     var warmUp = false
+    var staged = false
 
     /// The app's word cap for drafts; the default for `--mode draft`.
     static let draftWords = 80
@@ -77,8 +78,9 @@ struct Options {
                gw-eval --proofread <jsonl> [--limit N] [--verbose] [--json out.json]   (fix grammar with Apple's on-device model on sentence rows)
                gw-eval --decode-curve --set <jsonl> [--limit N (3)] [--curve-tokens N (16)] [--curve-repeats N (9)]
                        (GPU decode time by batch size after each row's prompt)
-               gw-eval --first-request --set <jsonl> [--limit N (5)] [--warm-up]
-                       (the first request after each model load against the same request repeated; --warm-up runs the engine's warm-up after each load)
+               gw-eval --first-request --set <jsonl> [--limit N (5)] [--warm-up] [--staged]
+                       (the first request after each model load against the same request repeated; --warm-up runs the engine's warm-up after each load;
+                        --staged stages the row's prompt without its last 5 characters before the first request, as the app does for the focused field)
                gw-eval --download <catalog id>
         variants: \(Variant.names.joined(separator: ", "))
         """
@@ -123,6 +125,7 @@ struct Options {
             case "--decode-curve": options.task = .decodeCurve
             case "--first-request": options.task = .firstRequest
             case "--warm-up": options.warmUp = true
+            case "--staged": options.staged = true
             case "--curve-tokens":
                 let x: Int = try number(flag)
                 guard x > 0 else { throw UsageError("--curve-tokens must be above 0") }

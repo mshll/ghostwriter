@@ -100,6 +100,7 @@ final class CompletionCoordinator {
         keys.onKey = { [weak self] event in self?.handleKey(event) }
         keys.onPointer = { [weak self] in self?.pointerMoved() }
         power.onChange = { [weak self] in self?.models.reconcile() }
+        models.onReady = { [weak self] in self?.restageAfterLoad() }
         BackgroundSampling.isAllowed = { [weak self] in self?.preferences.ocrEnabled ?? false }
         power.start()
         models.start()
@@ -759,6 +760,11 @@ final class CompletionCoordinator {
         let started = ContinuousClock.now
         let staged = await services.engine.stage(prompt: prompt.text)
         Self.log.info("Staged a new context in \(Self.ms(ContinuousClock.now - started), privacy: .public) ms\(staged ? "" : ", replaced", privacy: .public)")
+    }
+
+    private func restageAfterLoad() {
+        guard let context else { return }
+        Task { await stage(context) }
     }
 
     private func currentContext() async -> SessionContext {

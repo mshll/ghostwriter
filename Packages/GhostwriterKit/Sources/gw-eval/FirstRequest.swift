@@ -1,6 +1,8 @@
 import Foundation
 import Inference
 
+private let typedAfterFocus = 5
+
 /// The first request after each model load against the same request repeated with an empty cache, which isolates
 /// what a load leaves for the first decode to do (GPU pipeline setup, buffer allocation).
 func measureFirstRequest(_ options: Options, set: URL) async throws {
@@ -9,7 +11,7 @@ func measureFirstRequest(_ options: Options, set: URL) async throws {
     let harness = try await Harness.load(options)
     var first: [GenerationStats] = []
     var repeated: [GenerationStats] = []
-    print("load  warm-up   first: total prefill search   repeat: total prefill search  (ms)")
+    print("load  warm-up  stage   first: total prefill search   repeat: total prefill search  (ms)")
     for (index, row) in rows.enumerated() {
         if index > 0 {
             await harness.engine.unload()
@@ -23,6 +25,13 @@ func measureFirstRequest(_ options: Options, set: URL) async throws {
             await harness.engine.warmUp()
             warmUp = milliseconds(since: start)
         }
+        var stage: Double?
+        if options.staged {
+            let focused = try harness.request(for: row, before: String(row.before.dropLast(typedAfterFocus)))
+            let start = ContinuousClock.now
+            _ = await harness.engine.stage(prompt: focused.prompt)
+            stage = milliseconds(since: start)
+        }
         let request = try harness.request(for: row, before: row.before)
         let cold = try await harness.timed(request).stats
         await harness.engine.clearCache()
@@ -30,8 +39,8 @@ func measureFirstRequest(_ options: Options, set: URL) async throws {
         first.append(cold)
         repeated.append(again)
         print(
-            String(index + 1).leftPadded(4), format(warmUp, 0).leftPadded(9),
-            format(cold.totalMilliseconds, 0).leftPadded(13), format(cold.prefillMilliseconds, 0).leftPadded(7),
+            String(index + 1).leftPadded(4), format(warmUp, 0).leftPadded(9), format(stage, 0).leftPadded(6),
+            format(cold.totalMilliseconds, 0).leftPadded(14), format(cold.prefillMilliseconds, 0).leftPadded(7),
             format(cold.searchMilliseconds, 0).leftPadded(6),
             format(again.totalMilliseconds, 0).leftPadded(15), format(again.prefillMilliseconds, 0).leftPadded(7),
             format(again.searchMilliseconds, 0).leftPadded(6), "  \(cold.promptTokens) prompt tokens"
