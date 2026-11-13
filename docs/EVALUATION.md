@@ -23,7 +23,7 @@ Always use `-c release`: debug builds are several times slower.
 | `--proofread <set>` | Fix Grammar with Apple's on-device model on sentence rows: exact matches, injected typos fixed, other words changed, latency. |
 | `--decode-curve` | GPU time of one decode by its number of tokens (1 to 16), after the prompts of the first rows of the set. Shows where a beam step plus a mid-line rerank gets expensive. |
 
-`--typing --engine continuous` prints the median and 95th percentile time of an engine unit (`unit50`, `unit95`); the default mode prints the time of the mid-line rerank. `--midline-candidates`, `--midline-tokens`, `--midline-beams`, `--midline-rerank-every` and `--midline-budget` change how the mid-line rerank works; `gw-eval --help` lists them.
+`--typing --engine continuous` prints the median and 95th percentile time of an engine unit (`unit50`, `unit95`); the default mode prints the time of the mid-line rerank. `--midline-candidates`, `--midline-tokens` and `--midline-beams` change how the mid-line rerank works; `gw-eval --help` lists them.
 
 `gw-eval --help` lists every option. `--json out.json` saves each row's result.
 
