@@ -485,7 +485,7 @@ final class CompletionCoordinator {
     }
 
     private func startGeneration(for snapshot: FieldSnapshot, mode: CompletionRequest.Mode, forced: Bool) {
-        let delay: Duration = forced ? .zero : BuiltInAppRules.isTerminal(snapshot.app.bundleID) ? .milliseconds(30) : .milliseconds(5)
+        let delay: Duration = !forced && BuiltInAppRules.isTerminal(snapshot.app.bundleID) ? .milliseconds(30) : .zero
         generationCount += 1
         let id = generationCount
         let task = Task { [weak self] in
