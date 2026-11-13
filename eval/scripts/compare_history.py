@@ -52,7 +52,7 @@ def run(args: argparse.Namespace, mode: str, config: str) -> Path:
                 args.lock.mkdir()
                 break
             except FileExistsError:
-                time.sleep(30)
+                time.sleep(2)
     try:
         print("$", shlex.join(command), file=sys.stderr, flush=True)
         with target.with_suffix(".log").open("w") as handle:
