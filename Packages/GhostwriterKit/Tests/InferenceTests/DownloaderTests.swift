@@ -4,43 +4,83 @@ import Synchronization
 import Testing
 @testable import Inference
 
+/// Models the Hugging Face flow: the resolve URL redirects to a signed CDN URL that changes on every request
+/// and stops working once expired. Like the real CDN, it answers Range requests with 206 whatever If-Range says.
 final class StubProtocol: URLProtocol, @unchecked Sendable {
     struct Reply: Sendable {
         var status: Int
         var body: Data
         var delay: Duration = .zero
         var stallAfter: Int?
+        var etag = "\"stub\""
+        var ignoresRange = false
     }
 
     static let replies = Mutex<[String: Reply]>([:])
     static let hits = Mutex<[String: Int]>([:])
-    static let ranges = Mutex<[String: [String]]>([:])
+    /// Each request for file data, as "<signature> <Range header or full>".
+    static let fetches = Mutex<[String: [String]]>([:])
+    private static let signatures = Mutex<[String: (latest: Int, expired: Int)]>([:])
     private let stopped = Atomic<Bool>(false)
 
-    /// URL-less requests (from unusable resume data) go to URLSession's own handling, which fails them at once.
-    override class func canInit(with request: URLRequest) -> Bool { request.url != nil }
+    static func expireSignedURLs(of name: String) {
+        signatures.withLock { entries in
+            guard let latest = entries[name]?.latest else { return }
+            entries[name]?.expired = latest
+        }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        let name = request.url?.lastPathComponent ?? ""
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let name = url.lastPathComponent
+        if url.host == "huggingface.co" {
+            redirect(url, name: name)
+        } else {
+            serve(url, name: name)
+        }
+    }
+
+    /// The new request keeps the original headers, as URLSession does when it follows a real redirect.
+    private func redirect(_ url: URL, name: String) {
         Self.hits.withLock { $0[name, default: 0] += 1 }
+        let signature = Self.signatures.withLock { entry in
+            entry[name, default: (0, 0)].latest += 1
+            return entry[name, default: (0, 0)].latest
+        }
+        var signed = request
+        signed.url = URL(string: "https://cdn.hf.co/\(signature)/\(name)")
+        guard let location = signed.url,
+              let response = HTTPURLResponse(url: url, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: ["Location": location.absoluteString])
+        else { return }
+        client?.urlProtocol(self, wasRedirectedTo: signed, redirectResponse: response)
+    }
+
+    private func serve(_ url: URL, name: String) {
+        let signature = Int(url.pathComponents.dropLast().last ?? "") ?? 0
         let range = request.value(forHTTPHeaderField: "Range")
-        if let range { Self.ranges.withLock { $0[name, default: []].append(range) } }
-        let reply = Self.replies.withLock { $0[name] } ?? Reply(status: 404, body: Data())
-        let offset = range.flatMap { Int($0.dropFirst("bytes=".count).prefix { $0.isNumber }) } ?? 0
+        Self.fetches.withLock { $0[name, default: []].append("\(signature) \(range ?? "full")") }
+        let expired = Self.signatures.withLock { signature <= $0[name, default: (0, 0)].expired }
+        let reply = expired
+            ? Reply(status: 403, body: Data("expired".utf8))
+            : Self.replies.withLock { $0[name] } ?? Reply(status: 404, body: Data())
+        let offset = reply.ignoresRange ? 0 : range.flatMap { Int($0.dropFirst("bytes=".count).prefix { $0.isNumber }) } ?? 0
         let partial = reply.status == 200 && offset > 0
         let payload = partial ? reply.body.dropFirst(offset) : reply.body
-        var headers = ["Content-Length": "\(payload.count)", "ETag": "\"stub\"", "Accept-Ranges": "bytes"]
-        if partial { headers["Content-Range"] = "bytes \(offset)-\(reply.body.count - 1)/\(reply.body.count)" }
+        var fields = ["Content-Length": "\(payload.count)", "ETag": reply.etag, "Accept-Ranges": "bytes"]
+        if partial { fields["Content-Range"] = "bytes \(offset)-\(reply.body.count - 1)/\(reply.body.count)" }
+        let headers = fields
         let stallAfter = offset == 0 ? reply.stallAfter : nil
         let delay = DispatchTimeInterval.milliseconds(Int(reply.delay.components.seconds * 1000 + reply.delay.components.attoseconds / 1_000_000_000_000_000))
         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [self] in
-            guard !stopped.load(ordering: .relaxed), let url = request.url,
+            guard !stopped.load(ordering: .relaxed),
                   let response = HTTPURLResponse(url: url, statusCode: partial ? 206 : reply.status, httpVersion: "HTTP/1.1", headerFields: headers)
-            else {
-                if !stopped.load(ordering: .relaxed) { client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL)) }
-                return
-            }
+            else { return }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             if let stallAfter {
                 client?.urlProtocol(self, didLoad: payload.prefix(stallAfter))
@@ -86,16 +126,21 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         #expect(!exists(spec.fileName + ".download") && !exists(spec.fileName + ".resume"))
     }
 
-    @Test(arguments: [false, true]) func unusableResumeDataStartsOver(asPropertyList: Bool) async throws {
+    func fetches(_ spec: ModelSpec) -> [String] { StubProtocol.fetches.withLock { $0[spec.fileName] ?? [] } }
+
+    @Test(arguments: [true, false]) func leftoversThatCannotBeValidatedStartOver(partial: Bool) async throws {
         let spec = makeSpec(.init(status: 200, body: body))
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let stale = asPropertyList
-            ? try PropertyListSerialization.data(fromPropertyList: ["expired": true], format: .binary, options: 0)
-            : Data("not resume data".utf8)
-        try stale.write(to: folder.appending(path: spec.fileName + ".resume"))
+        if partial {
+            try body.prefix(50_000).write(to: folder.appending(path: spec.fileName + ".download"))
+        } else {
+            let resumeData = try PropertyListSerialization.data(fromPropertyList: ["expired": true], format: .binary, options: 0)
+            try resumeData.write(to: folder.appending(path: spec.fileName + ".resume"))
+        }
 
         let url = try await makeDownloader().download(spec) { _ in }
         #expect(try Data(contentsOf: url) == body)
+        #expect(fetches(spec) == ["1 full"])
         #expect(!exists(spec.fileName + ".resume"))
     }
 
@@ -145,18 +190,62 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         return task
     }
 
-    @Test func downloadStoppedByQuitResumesWhereItStopped() async throws {
-        let spec = makeSpec(.init(status: 200, body: body, stallAfter: 50_000))
+    /// Quits after the first 50,000 bytes and lets the signed URL expire, then resumes with `reply`.
+    func resumeAfterQuit(
+        _ spec: ModelSpec, first: StubProtocol.Reply? = nil, then reply: StubProtocol.Reply
+    ) async throws -> (URL, first: Double?) {
+        let first = first ?? .init(status: 200, body: body, stallAfter: 50_000)
+        StubProtocol.replies.withLock { $0[spec.fileName] = first }
         let downloader = makeDownloader()
         let task = try await startStalledDownload(downloader, spec)
         await downloader.suspendAll()
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(await downloader.interrupted(among: [spec]) == [spec])
+        #expect(exists(spec.fileName + ".download"))
 
-        let url = try await makeDownloader().download(spec) { _ in }
+        StubProtocol.expireSignedURLs(of: spec.fileName)
+        StubProtocol.replies.withLock { $0[spec.fileName] = reply }
+        let firstProgress = Mutex<Double?>(nil)
+        let url = try await makeDownloader().download(spec) { fraction in firstProgress.withLock { $0 = $0 ?? fraction } }
+        return (url, firstProgress.withLock { $0 })
+    }
+
+    @Test func downloadStoppedByQuitResumesFromAFreshSignedURL() async throws {
+        let spec = makeSpec(nil)
+        let (url, firstProgress) = try await resumeAfterQuit(spec, then: .init(status: 200, body: body))
         #expect(try Data(contentsOf: url) == body)
-        #expect(StubProtocol.ranges.withLock { $0[spec.fileName] } == ["bytes=50000-"])
+        #expect(fetches(spec) == ["1 full", "2 bytes=50000-"])
+        #expect(try #require(firstProgress) >= 0.25)
         #expect(await makeDownloader().interrupted(among: [spec]).isEmpty)
+    }
+
+    @Test func changedFileRestartsFromZero() async throws {
+        let spec = makeSpec(nil)
+        let older = StubProtocol.Reply(status: 200, body: Data(body.reversed()), stallAfter: 50_000)
+        let (url, _) = try await resumeAfterQuit(spec, first: older, then: .init(status: 200, body: body, etag: "\"changed\""))
+        #expect(try Data(contentsOf: url) == body)
+        #expect(fetches(spec) == ["1 full", "2 bytes=50000-", "3 full"])
+    }
+
+    @Test func fullReplyToARangeRequestRestartsFromZero() async throws {
+        let spec = makeSpec(nil)
+        let (url, _) = try await resumeAfterQuit(spec, then: .init(status: 200, body: body, ignoresRange: true))
+        #expect(try Data(contentsOf: url) == body)
+        #expect(fetches(spec) == ["1 full", "2 bytes=50000-"])
+    }
+
+    @Test func weakETagIsNotTrustedForResuming() async throws {
+        let spec = makeSpec(nil)
+        let weak = StubProtocol.Reply(status: 200, body: body, stallAfter: 50_000, etag: "W/\"stub\"")
+        let (url, _) = try await resumeAfterQuit(spec, first: weak, then: .init(status: 200, body: body))
+        #expect(try Data(contentsOf: url) == body)
+        #expect(fetches(spec) == ["1 full", "2 full"])
+    }
+
+    @Test func checksumMismatchNeverInstallsTheFile() async throws {
+        let spec = makeSpec(.init(status: 200, body: Data(repeating: 7, count: body.count)))
+        await #expect(throws: InferenceError.self) { try await makeDownloader().download(spec) { _ in } }
+        #expect(!exists(spec.fileName) && !exists(spec.fileName + ".download") && !exists(spec.fileName + ".resume"))
     }
 
     @Test(arguments: [Stop.cancel, .taskCancel]) func cancelledDownloadLeavesNothingToResume(stop: Stop) async throws {
