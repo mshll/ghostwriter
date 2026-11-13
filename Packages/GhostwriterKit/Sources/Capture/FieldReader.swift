@@ -220,7 +220,8 @@ struct FieldReader {
             label: context.label,
             windowTitle: context.windowTitle,
             url: context.url,
-            language: context.language
+            language: context.language,
+            caretIsEstimated: caret.source == .estimate
         ))
     }
 

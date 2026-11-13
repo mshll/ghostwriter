@@ -53,10 +53,14 @@ public final class GhostOverlay {
             .font: font.font,
             .foregroundColor: Self.ghostColor(snapshot.style, appearance: appearance),
         ]
-        let wraps = multiline || GhostLayout.runsPastLineEnd(text, snapshot: snapshot, screen: screen, font: font.font)
-        let placed = wraps
-            ? multilineText(text, snapshot: snapshot, screen: screen, font: font, attributes: attributes)
-            : singleLineText(text, snapshot: snapshot, screen: screen, font: font, attributes: attributes)
+        let placed: (NSAttributedString, GhostPlacement)? =
+            if !GhostLayout.drawsAtCaret(snapshot) {
+                besideFieldText(text, snapshot: snapshot, font: font)
+            } else if multiline || GhostLayout.runsPastLineEnd(text, snapshot: snapshot, screen: screen, font: font.font) {
+                multilineText(text, snapshot: snapshot, screen: screen, font: font, attributes: attributes)
+            } else {
+                singleLineText(text, snapshot: snapshot, screen: screen, font: font, attributes: attributes)
+            }
         guard let (string, placement) = placed else {
             hide()
             return false
@@ -87,7 +91,8 @@ public final class GhostOverlay {
     @discardableResult
     public func showTypoFix(word: String, closing: String, correction: String, for snapshot: FieldSnapshot) -> Bool {
         let caret = snapshot.caretRect
-        guard Self.isPlaceable(caret), let primaryHeight = ScreenGeometry.primaryHeight else {
+        guard Self.isPlaceable(caret), GhostLayout.drawsAtCaret(snapshot), let primaryHeight = ScreenGeometry.primaryHeight
+        else {
             hide()
             return false
         }
@@ -312,6 +317,43 @@ public final class GhostOverlay {
             )
             placement.backdrop = backdrop
         }
+        return (string, placement)
+    }
+
+    /// Drawn over whatever lies next to the field, so on the system's text colours rather than the field's.
+    private func besideFieldText(
+        _ text: String,
+        snapshot: FieldSnapshot,
+        font: GhostFont
+    ) -> (NSAttributedString, GhostPlacement)? {
+        let field = snapshot.fieldFrame
+        let text = String(text.drop(while: \.isWhitespace))
+        guard !text.isEmpty,
+              let screen = ScreenGeometry.screenFrame(containing: CGPoint(x: field.midX, y: field.midY), visible: true)
+        else { return nil }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.baseWritingDirection = snapshot.direction == .leftToRight ? .leftToRight : .rightToLeft
+        paragraph.alignment = snapshot.direction == .leftToRight ? .left : .right
+        let string = NSAttributedString(string: text, attributes: [
+            .font: font.font,
+            .foregroundColor: NSColor.textColor.withAlphaComponent(appearance.opacity),
+            .paragraphStyle: paragraph,
+        ])
+        let maxWidth = min(field.width, screen.width) - 2 * GhostLayout.besideFieldPadding.width
+        guard maxWidth >= 1 else { return nil }
+        let size = string.boundingRect(
+            with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin]
+        ).size
+        guard let placement = GhostLayout.besideField(
+            textSize: CGSize(width: min(size.width.rounded(.up), maxWidth), height: size.height.rounded(.up)),
+            lineHeight: font.lineHeight,
+            field: field,
+            screen: screen,
+            direction: snapshot.direction,
+            background: .textBackgroundColor
+        ) else { return nil }
         return (string, placement)
     }
 
