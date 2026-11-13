@@ -114,6 +114,7 @@ final class ModelController {
                 }
                 self.appState.modelStatus = .ready(name: wanted.displayName)
                 Self.log.info("Loaded \(info.name, privacy: .public)")
+                await engine.warmUp()
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 self.loadedID = nil

@@ -22,6 +22,8 @@ flowchart LR
 
 `FocusTracker` follows the focused text field through Accessibility. `FieldReader` reads the text before and after the caret, the caret's position and the field's font. `FieldClassifier` decides what kind of field it is (email, chat, document, search, code, form and others) from its role, its labels and the app. Secure fields, fields that look like they hold a password, a payment card number, security code or expiry date, or a one-time code, and password managers are never read. These are recognized from the field's labels, placeholder and identifiers, never from its text.
 
+`FocusTracker` reads the field when Accessibility reports a change and after each key press. A poll backs these up for apps that report changes late or not at all: once a second, every 4 s after 30 s without a change, and not at all while the Mac or its displays sleep or another user's session is in front. The clipboard check pauses at the same times.
+
 Suggestions start automatically only once the text before the caret holds a space or a line break, so a single word (an email address, a username, a name) gets none. Scripts written without spaces, such as Chinese, Japanese and Thai, are exempt. Suggest now still works on a single word.
 
 While suggestions are off everywhere (from the menu bar or the shortcut), `FocusTracker` stops: no field is read and nothing is recorded, except a field read for a proofread or selection action shortcut. The model is unloaded to free its memory. Turning suggestions on loads it again, so the first suggestion after that comes late: Gemma 4 E2B took 1.2 to 1.4 s to load in repeated runs and 6.7 s in the first run. Pausing one app keeps the tracker running.
@@ -73,7 +75,9 @@ When the text before the caret is longer than its budget (350 tokens), its start
 
 **Drafts.** A long draft streams the text that all live beams have in common, cut to whole words. Streamed words never change.
 
-**New context.** When window text or new examples arrive, the engine decodes the new prompt in a separate cache sequence while it continues to answer key presses with the old one. It switches to the new prompt when it is ready. While you type it decodes 32 tokens per unit, so a key press waits at most for one small unit.
+**New context.** When window text or new examples arrive, the engine decodes the new prompt in a separate cache sequence while it continues to answer key presses with the old one. It switches to the new prompt when it is ready. While you type it decodes 32 tokens per unit, so a key press waits at most for one small unit. When the old and the new prompt do not fit in the context together, the new prompt replaces the old one, and key presses wait for its decode. The log notes each time, and the diagnostics in Settings > About count them.
+
+**Warm-up.** After each load the engine runs a one-word search on a fixed prompt and discards it. The first decode after a load sets up the GPU's work: without the warm-up, the first suggestion took 9 to 76 ms longer than the same request later, and with it at most 7 ms (`gw-eval --first-request`). The warm-up takes 120 to 200 ms; a request that arrives meanwhile waits for it.
 
 **Power.** On battery, in Low Power Mode, or when the Mac is hot, the engine works in economy mode: it does not follow your typing while a suggestion shows.
 

@@ -104,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func frontmostAppDidChange(_ app: NSRunningApplication?) {
+        appState.refreshPermissions()
         guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
               let bundleID = app.bundleIdentifier
         else { return }

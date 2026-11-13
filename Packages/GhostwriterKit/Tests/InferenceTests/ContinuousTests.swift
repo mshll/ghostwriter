@@ -203,6 +203,26 @@ import Testing
         return false
     }
 
+    @Test func warmUpDecodesAndLeavesNothingCached() async throws {
+        let toy = await ToyEngine.make()
+        await toy.engine.warmUp()
+        #expect(toy.context.decodeCalls > 0)
+        #expect(toy.context.sequences.isEmpty)
+        let result = try final(await toy.settle(.toy("i saw the")))
+        let fresh = try final(await ToyEngine.make().settle(.toy("i saw the")))
+        #expect(result.candidates.map(\.text) == fresh.candidates.map(\.text))
+    }
+
+    @Test func cancelledWarmUpDecodesNothing() async {
+        let toy = await ToyEngine.make()
+        await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            await toy.engine.warmUp()
+        }.value
+        #expect(toy.context.decodeCalls == 0)
+        #expect(toy.context.sequences.isEmpty)
+    }
+
     @Test func aStagedPromptIsTakenOverWithoutDecodingItAgain() async throws {
         let toy = await ToyEngine.make()
         _ = await toy.settle(.toy("i saw the "))
@@ -217,6 +237,16 @@ import Testing
         #expect(result.candidates.first == freshResult.candidates.first)
         // The prompt came from the staging sequence: only beam steps were decoded.
         #expect(toy.context.decodedTokens - tokens < fresh.context.decodedTokens - 5)
+    }
+
+    @Test func aPromptWithNoRoomBesideTheCachedOneIsCounted() async throws {
+        let toy = await ToyEngine.make()
+        _ = await toy.settle(.toy(String(repeating: "i saw the cat ", count: 500)))
+        #expect(toy.engine.inPlaceStagingCount == 0)
+        let staged = Task { await toy.engine.stage(prompt: String(repeating: "a red car and then ", count: 400)) }
+        #expect(await runUntilStaged(toy))
+        #expect(await staged.value)
+        #expect(toy.engine.inPlaceStagingCount == 1)
     }
 
     @Test func requestsOnTheOldPromptGoFirstWhileAPromptIsStaged() async throws {

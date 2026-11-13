@@ -22,6 +22,7 @@ Always use `-c release`: debug builds are several times slower.
 | `--typos <set>` | Typo correction on word rows, for the spell checker alone and with the model judge at several margins. Reports precision, recall, false flags and latency. |
 | `--proofread <set>` | Fix Grammar with Apple's on-device model on sentence rows: exact matches, injected typos fixed, other words changed, latency. |
 | `--decode-curve` | GPU time of one decode by its number of tokens (1 to 16), after the prompts of the first rows of the set. Shows where a beam step plus a mid-line rerank gets expensive. |
+| `--first-request` | The first request after each model load against the same request repeated with an empty cache, over the first rows of the set. `--warm-up` runs the engine's warm-up after each load. |
 
 `--typing --engine continuous` prints the median and 95th percentile time of an engine unit (`unit50`, `unit95`); the default mode prints the time of the mid-line rerank. `--midline-candidates`, `--midline-tokens` and `--midline-beams` change how the mid-line rerank works; `gw-eval --help` lists them.
 

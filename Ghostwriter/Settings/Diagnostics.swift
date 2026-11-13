@@ -6,13 +6,15 @@ import Inference
 
 /// A plain-text summary for bug reports: the Mac, the app's state and its settings. Never any text the user wrote.
 enum Diagnostics {
-    static func report(preferences: Preferences, appState: AppState, models: ModelLibrary) -> String {
+    static func report(preferences: Preferences, appState: AppState, services: AppServices) -> String {
+        let models = services.models
         let hardware = models.hardware
         return """
             Ghostwriter \(AppVersion.label)
             macOS \(ProcessInfo.processInfo.operatingSystemVersionString.replacing("Version ", with: ""))
             Mac: \(macModel), \(hardware.chip.isEmpty ? "Apple silicon" : hardware.chip), \(hardware.memoryGB) GB
             Model: \(models.activeModel?.displayName ?? "none"), \(appState.modelStatus.diagnosticLabel)
+            New context without room to stage: \(services.engine.inPlaceStagingCount) since launch
             Accessibility: \(onOff(appState.accessibilityGranted)), Screen Recording: \(onOff(appState.screenRecordingGranted)), \
             Paste from other apps: \(onOff(appState.clipboardAccessAllowed)), macOS inline predictions: \(onOff(appState.macOSPredictionsEnabled))
             Suggestions: \(onOff(preferences.completionsEnabled)), length \(preferences.completionLength.title), \

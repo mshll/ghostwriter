@@ -113,6 +113,7 @@ final class CompletionCoordinator {
         followActiveApp()
         followSuggestionSwitch()
         startMonitorsWhenTrusted()
+        guard !monitorsStarted else { return }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.startMonitorsWhenTrusted() }
         }
@@ -208,6 +209,8 @@ final class CompletionCoordinator {
             Self.log.error("The key monitor could not start")
             return
         }
+        permissionTimer?.invalidate()
+        permissionTimer = nil
         if isOnEverywhere { tracker.start() }
         Self.log.info("Completion pipeline started")
     }

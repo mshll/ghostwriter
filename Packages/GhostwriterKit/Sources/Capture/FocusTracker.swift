@@ -25,7 +25,6 @@ public final class FocusTracker {
     private static let log = Logger.gw("capture")
     private static let debounce: TimeInterval = 0.005
     private static let terminalDebounce: TimeInterval = 0.030
-    private static let pollInterval: TimeInterval = 1.0
     private static let treePollInterval: Duration = .milliseconds(150)
     private static let treePollDuration: Duration = .seconds(4)
     private static let transientRetryDelay: TimeInterval = 0.05
@@ -42,7 +41,9 @@ public final class FocusTracker {
     private var rereadRequested = false
     private var transientStrikes = 0
     private var workspaceObservers: [NSObjectProtocol] = []
-    private var pollTimer: Timer?
+    private var pollTask: Task<Void, Never>?
+    private var pollSchedule = FocusPollSchedule(now: .now)
+    private let presence = PresenceMonitor()
     private var treePoll: (app: AppTarget?, until: ContinuousClock.Instant, task: Task<Void, Never>)?
 
     public init() {}
@@ -63,9 +64,10 @@ public final class FocusTracker {
                 MainActor.assumeIsolated { self?.appTerminated(app) }
             },
         ]
-        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.requestRead() }
-        }
+        presence.onChange = { [weak self] isAway in self?.presenceChanged(isAway: isAway) }
+        presence.start()
+        pollSchedule = FocusPollSchedule(now: .now)
+        startPolling()
         retarget(to: Self.appTarget(NSWorkspace.shared.frontmostApplication))
     }
 
@@ -76,8 +78,9 @@ public final class FocusTracker {
         isRunning = false
         workspaceObservers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         workspaceObservers = []
-        pollTimer?.invalidate()
-        pollTimer = nil
+        presence.stop()
+        pollTask?.cancel()
+        pollTask = nil
         treePoll?.task.cancel()
         treePoll = nil
         tearDownObservation()
@@ -88,6 +91,7 @@ public final class FocusTracker {
     }
 
     public func snapshot() async -> FieldSnapshot? {
+        noteActivity()
         guard let app = target ?? Self.appTarget(NSWorkspace.shared.frontmostApplication),
               !isExcluded(app) else { return nil }
         let outcome = await worker.read(app, rule: rule(for: app.identity.bundleID))
@@ -97,6 +101,40 @@ public final class FocusTracker {
     }
 
     fileprivate func accessibilityNotification() {
+        noteActivity()
+        requestRead()
+    }
+
+    // MARK: Polling
+
+    private func startPolling() {
+        pollTask?.cancel()
+        pollTask = Task { [weak self] in
+            while let interval = self?.pollSchedule.interval(at: .now) {
+                do {
+                    try await Task.sleep(for: interval, tolerance: interval / 10)
+                } catch {
+                    return
+                }
+                self?.requestRead()
+            }
+        }
+    }
+
+    private func noteActivity() {
+        pollSchedule.noteActivity(at: .now)
+    }
+
+    private func presenceChanged(isAway: Bool) {
+        guard isRunning else { return }
+        Self.log.info("Focus poll \(isAway ? "paused: nobody at the Mac" : "resumed", privacy: .public)")
+        pollSchedule.isAway = isAway
+        guard !isAway else {
+            pollTask?.cancel()
+            return
+        }
+        pollSchedule.noteActivity(at: .now)
+        startPolling()
         requestRead()
     }
 
@@ -104,6 +142,7 @@ public final class FocusTracker {
 
     private func retarget(to app: AppTarget?) {
         guard isRunning, app != target || observation == nil else { return }
+        noteActivity()
         tearDownObservation()
         target = app
         guard let app else {
@@ -242,6 +281,7 @@ public final class FocusTracker {
         let previous = current
         current = snapshot
         lastUnfocused = nil
+        if previous != snapshot { noteActivity() }
         if previous?.id != snapshot.id {
             onEvent?(.focused(snapshot))
         } else if previous != snapshot {
@@ -252,6 +292,7 @@ public final class FocusTracker {
     private func publishUnfocused(_ app: AppIdentity?, _ reason: IneligibleReason) {
         let state = Unfocused(app: app, reason: reason)
         guard current != nil || lastUnfocused != state else { return }
+        noteActivity()
         current = nil
         lastUnfocused = state
         onEvent?(.unfocused(app, reason))

@@ -358,7 +358,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func copyDiagnostics() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(
-            Diagnostics.report(preferences: preferences, appState: appState, models: services.models), forType: .string
+            Diagnostics.report(preferences: preferences, appState: appState, services: services), forType: .string
         )
     }
 
