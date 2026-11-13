@@ -15,7 +15,15 @@ public actor ModelDownloader {
     private let log = Logger.gw("download")
 
     public init() {
-        self.init(folder: AppPaths.models, configuration: .default, home: FileManager.default.homeDirectoryForCurrentUser)
+        self.init(folder: AppPaths.models, configuration: Self.uncached, home: FileManager.default.homeDirectoryForCurrentUser)
+    }
+
+    /// Model bodies go straight to the partial file; a response cache would only hold a second copy.
+    private static var uncached: URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.default
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return configuration
     }
 
     init(folder: URL, configuration: URLSessionConfiguration, home: URL) {
