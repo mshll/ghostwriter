@@ -170,6 +170,18 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
         #expect(found == [mail, notes])
     }
 
+    @Test func theRankingBoostsAreTunable() {
+        let now = Date.now
+        let hits = [
+            MemoryStore.Hit(bundleID: "com.apple.Notes", text: "notes", updatedAt: now, relevance: 1.2),
+            MemoryStore.Hit(bundleID: "com.apple.mail", text: "mail", updatedAt: now.addingTimeInterval(-90 * day), relevance: 1),
+        ]
+        #expect(MemoryStore.rank(hits, bundleID: "com.apple.mail", now: now).map(\.text) == ["mail", "notes"])
+        var flat = ExampleRanking()
+        flat.sameAppBoost = 1
+        #expect(MemoryStore.rank(hits, bundleID: "com.apple.mail", now: now, ranking: flat).map(\.text) == ["notes", "mail"])
+    }
+
     @Test func theLanguageFilterKeepsOtherLanguagesOut() throws {
         let store = try MemoryStore.inMemory()
         let german = "Der Zeitplan für das Projekt ist sehr knapp, deshalb sollten wir die Meilensteine nächste Woche gemeinsam prüfen."

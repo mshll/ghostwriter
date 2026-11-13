@@ -1,6 +1,7 @@
 import Foundation
 import GWCore
 import Inference
+import Memory
 import Prompting
 
 struct Options {
@@ -38,6 +39,10 @@ struct Options {
     var settle: Double? = ShownSuggestion.settleMilliseconds
     var pause = 1500.0
     var pauseTyped = 6
+    var history: URL?
+    var exampleLimit = Personalization.appExampleLimit
+    var biasStrength = Personalization.appBiasStrength
+    var ranking = ExampleRanking()
 
     /// The app's word cap for drafts; the default for `--mode draft`.
     static let draftWords = 80
@@ -48,6 +53,8 @@ struct Options {
                        [--midline-bonus X] [--midline-margin X] [--midline-tokens N] [--midline-candidates N] [--no-echo-guard]
                        [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--screen-tokens N] [--total-tokens N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
                        [--first-shown]   (score the first suggestion streamed, not the final one)
+                       [--history <jsonl>]   (writing history from eval/scripts/build_history_set.py: examples and word bias as in the app)
+                       [--examples N (2)] [--bias-strength X (1.5)] [--same-app-boost X (1.5)] [--recency-boost X (0.2)]   (with --history)
                gw-eval --bench --set <jsonl> [--model <gguf>] [--beams N]
                gw-eval --score --set <jsonl> [--model <gguf>] [--limit N] [--json out.json]   (bits per character of the truth)
                gw-eval --typing --set <jsonl> [--model <gguf>] [--limit N] [--json out.json]  (keystrokes saved when typing the truth)
@@ -194,6 +201,17 @@ struct Options {
             case "--midline-margin":
                 let x: Double = try number(flag)
                 overrides.append { $0.midLineMargin = x }
+            case "--history": options.history = URL(filePath: try value(flag))
+            case "--examples":
+                let x: Int = try number(flag)
+                guard x >= 0 else { throw UsageError("--examples must be 0 or more") }
+                options.exampleLimit = x
+            case "--bias-strength":
+                let x: Double = try number(flag)
+                guard x >= 0 else { throw UsageError("--bias-strength must be 0 or more") }
+                options.biasStrength = x
+            case "--same-app-boost": options.ranking.sameAppBoost = try number(flag)
+            case "--recency-boost": options.ranking.recencyBoost = try number(flag)
             case "--help", "-h": throw UsageError(nil)
             default: throw UsageError("unknown argument \(flag)")
             }
@@ -203,7 +221,18 @@ struct Options {
         options.tuning = tuning
         for override in overrides { override(&options.tuning) }
         guard options.set != nil || options.download != nil else { throw UsageError("--set is required") }
+        let personalizing = ["--examples", "--bias-strength", "--same-app-boost", "--recency-boost"]
+        if options.history == nil, let flag = personalizing.first(where: arguments.contains) {
+            throw UsageError("\(flag) needs --history")
+        }
         return options
+    }
+
+    func personalization() throws -> Personalization? {
+        guard let history else { return nil }
+        return Personalization(
+            memory: try Personalization.load(history), exampleLimit: exampleLimit, biasStrength: biasStrength, ranking: ranking
+        )
     }
 }
 

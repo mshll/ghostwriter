@@ -37,6 +37,35 @@ Larger sets contain text from the web, so they are not in git. Build them into `
 
 `eval/scripts/compare_models.py` runs several models on several sets and prints one table.
 
+## Your own writing
+
+The sets above are public text, and by default `gw-eval` builds prompts without the examples of your writing and the word preferences the app adds. To measure those on what you write, build a set from a copy of your own database:
+
+```sh
+sqlite3 "file:$HOME/Library/Application Support/com.mshl.ghostwriter/ghostwriter.sqlite?mode=ro" \
+    ".backup '$TMPDIR/ghostwriter-copy.sqlite'"
+uv run --script eval/scripts/build_history_set.py "$TMPDIR/ghostwriter-copy.sqlite" --kind <bundle id>=aiPrompt
+```
+
+The script splits your recorded writing by date. The older sessions become `history.jsonl`, the newer ones `test.jsonl`, with rows cut at word boundaries. It drops test sessions that repeat a history session. The database does not store field kinds, so `--kind` sets them per app. Both files hold your writing. They go to `eval/private/history/`, which git ignores. Keep them on your Mac.
+
+```sh
+gw-eval --score --set eval/private/history/test.jsonl --history eval/private/history/history.jsonl
+```
+
+With `--history`, each request gets examples and word bias as in the app at the default personalization strength.
+
+| Flag | Default | Changes |
+|---|---|---|
+| `--examples N` | 2 | Examples of your writing in the prompt; 0 turns them off |
+| `--bias-strength X` | 1.5 | Word preference bias in the beam search; 0 turns it off. `--score` ignores it. |
+| `--same-app-boost X` | 1.5 | Ranking weight for examples from the same app |
+| `--recency-boost X` | 0.2 | Ranking weight for recent examples |
+
+`eval/scripts/compare_history.py` runs the set with each setting off and on, and prints the differences with 95% confidence intervals.
+
+Your sessions include suggestions you accepted, so the set favors the model a little. The script prints how many accepted characters there are, as an upper bound.
+
 ## In a pull request
 
 Give the command, the set, the numbers before and after, and your Mac's chip and memory for any latency number.
