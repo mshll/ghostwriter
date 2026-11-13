@@ -23,6 +23,7 @@ struct Options {
     var download: String?
     var afterSection = true
     var screen = true
+    var reverseScreen = false
     var budgets = PromptBudgets()
     var promptVariant = PromptVariant.standard
     var task = Task.evaluate
@@ -51,7 +52,7 @@ struct Options {
         usage: gw-eval --set <jsonl> [--model <gguf>] [--variant <name>] [--beams N] [--top-k N] [--max-words N (inline: medium length, draft: 80)]
                        [--length-penalty X] [--floor X] [--confidence X] [--midline-confidence X] [--early-stop X] [--narrow-after N] [--narrow-stop P]
                        [--midline-bonus X] [--midline-margin X] [--midline-tokens N] [--midline-candidates N] [--no-echo-guard]
-                       [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--screen-tokens N] [--total-tokens N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
+                       [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--reverse-screen] [--screen-tokens N] [--total-tokens N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
                        [--first-shown]   (score the first suggestion streamed, not the final one)
                        [--history <jsonl>]   (writing history from eval/scripts/build_history_set.py: examples and word bias as in the app)
                        [--examples N (2)] [--bias-strength X (1.5)] [--same-app-boost X (1.5)] [--recency-boost X (0.2)]   (with --history)
@@ -102,6 +103,7 @@ struct Options {
             case "--no-warm": options.warm = false
             case "--no-after-section": options.afterSection = false
             case "--no-screen": options.screen = false
+            case "--reverse-screen": options.reverseScreen = true
             case "--screen-tokens": options.budgets.screen = try number(flag)
             case "--total-tokens": options.budgets.total = try number(flag)
             case "--prompt":

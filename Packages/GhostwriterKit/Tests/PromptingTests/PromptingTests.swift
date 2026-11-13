@@ -87,6 +87,23 @@ let englishParagraph = """
         #expect(long.hasSuffix("would also like to "))
     }
 
+    @Test func screenCutDropsTheFarthestTextAndStaysStable() throws {
+        var budgets = PromptBudgets()
+        budgets.screen = 64
+        let screen = (1...40).map { "Message \($0) of the thread above the reply box." }.joined(separator: "\n")
+        func prompt(_ before: String) -> String {
+            makeBuilder(budgets).build(PromptContext(appName: "Messages", screenText: screen, textBefore: before)).text
+        }
+        let short = prompt(englishParagraph)
+        let long = prompt(englishParagraph + " and I will see you then")
+        let start = try #require(short.range(of: PromptText.screenLabel)?.upperBound)
+        let end = try #require(short[start...].range(of: "\n\n")?.lowerBound)
+        let section = short[start..<end]
+        #expect(section.hasSuffix("Message 40 of the thread above the reply box."))
+        #expect(!section.contains("Message 1 of"))
+        #expect(long.hasPrefix(short[..<end]))
+    }
+
     @Test func windowTitleMatchingAppNameIsSkipped() {
         let text = makeBuilder().build(PromptContext(appName: "Notes", windowTitle: "notes", textBefore: "Hi ")).text
         #expect(!text.contains("The window is titled"))

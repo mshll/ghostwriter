@@ -22,20 +22,49 @@ enum ScreenText {
             .map { (chunk: $0, score: score($0.frame, caret: anchor, field: snapshot.fieldFrame)) }
             .sorted { $0.score < $1.score }
 
-        var parts: [String] = []
+        var picked: [TextChunk] = []
         var remaining = maxCharacters
         for (chunk, _) in ranked where remaining > 0 {
             guard let text = cleaned(chunk.text) else { continue }
             let key = normalized(text)
             if titles.contains(where: { key.contains($0) && key.count <= $0.count + 6 }) { continue }
             guard seen.insert(key).inserted else { continue }
-            let isAbove = chunk.frame.midY <= anchor.midY
-            let fitted = fit(text, into: remaining, keepEnd: isAbove)
+            let fitted = fit(text, into: remaining, keepEnd: isAbove(chunk, anchor))
             guard !fitted.isEmpty else { break }
-            parts.append(fitted)
+            picked.append(TextChunk(text: fitted, frame: chunk.frame))
             remaining -= fitted.count + 1
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+        return picked.isEmpty ? nil : readingOrder(picked, caret: anchor).map(\.text).joined(separator: "\n")
+    }
+
+    /// Text below the caret first, then the text above it, each top to bottom, so the text nearest above
+    /// the caret ends the section, next to the typed text that follows it in the prompt.
+    static func readingOrder(_ chunks: [TextChunk], caret: CGRect) -> [TextChunk] {
+        topToBottom(chunks.filter { !isAbove($0, caret) }) + topToBottom(chunks.filter { isAbove($0, caret) })
+    }
+
+    private static func isAbove(_ chunk: TextChunk, _ caret: CGRect) -> Bool {
+        chunk.frame.midY <= caret.midY
+    }
+
+    private static func topToBottom(_ chunks: [TextChunk]) -> [TextChunk] {
+        var rows: [[TextChunk]] = []
+        for chunk in chunks.sorted(by: { ($0.frame.minY, $0.frame.minX) < ($1.frame.minY, $1.frame.minX) }) {
+            if let first = rows.last?.first, chunk.frame.midY < first.frame.maxY {
+                rows[rows.count - 1].append(chunk)
+            } else {
+                rows.append([chunk])
+            }
+        }
+        return rows.flatMap { row in
+            let leftToRight = row.sorted { $0.frame.minX < $1.frame.minX }
+            return isRightToLeft(row) ? leftToRight.reversed() : leftToRight
+        }
+    }
+
+    private static func isRightToLeft(_ row: [TextChunk]) -> Bool {
+        let letters = row.flatMap(\.text.unicodeScalars).filter(\.properties.isAlphabetic)
+        return letters.filter(\.isRightToLeftScript).count * 2 > letters.count
     }
 
     static func score(_ frame: CGRect, caret: CGRect, field: CGRect) -> CGFloat {
@@ -109,6 +138,15 @@ enum ScreenText {
         let leftEnds = left.last.map { $0.isWhitespace } ?? true
         let rightStarts = right.first.map { $0.isWhitespace || ",.;:!?)]}%".contains($0) } ?? true
         return left + (leftEnds || rightStarts ? "" : " ") + right
+    }
+}
+
+private extension Unicode.Scalar {
+    var isRightToLeftScript: Bool {
+        switch value {
+        case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF, 0x10800...0x10FFF, 0x1E800...0x1EFFF: true
+        default: false
+        }
     }
 }
 

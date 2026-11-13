@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import GWCore
 import Testing
 import ScreenCaptureKit
 @testable import ScreenContext
@@ -205,5 +206,60 @@ import ScreenCaptureKit
         #expect(WindowOCR.isDeclined(SCStreamError(.userDeclined)))
         #expect(!WindowOCR.isDeclined(SCStreamError(.failedToStart)))
         #expect(!WindowOCR.isDeclined(WindowOCRError.windowNotFound))
+    }
+}
+
+@Suite struct ReadingOrderTests {
+    private let field = CGRect(x: 40, y: 700, width: 700, height: 60)
+    private let oldest = TextChunk(text: "Are we still meeting on Monday?", frame: CGRect(x: 40, y: 100, width: 500, height: 40))
+    private let older = TextChunk(text: "Yes, at ten in the small room.", frame: CGRect(x: 40, y: 200, width: 500, height: 40))
+    private let newer = TextChunk(text: "Could you bring the printed agenda?", frame: CGRect(x: 40, y: 300, width: 500, height: 40))
+    private let newest = TextChunk(text: "Also send me the budget numbers.", frame: CGRect(x: 40, y: 400, width: 500, height: 40))
+    private let below = TextChunk(text: "Press return to send your message", frame: CGRect(x: 40, y: 800, width: 500, height: 20))
+
+    private func snapshot(fieldText: String = "Sure, I will", title: String? = nil) -> FieldSnapshot {
+        FieldSnapshot(
+            id: FieldID(pid: 1, elementHash: 1), app: AppIdentity(bundleID: "test", name: "Chat", pid: 1),
+            textBefore: fieldText, textAfter: "", caretRect: CGRect(x: 120, y: 710, width: 1, height: 18),
+            fieldFrame: field, windowTitle: title
+        )
+    }
+
+    private func lines(_ chunks: [TextChunk], maxCharacters: Int = 2400, fieldText: String = "Sure, I will", title: String? = nil) -> [String] {
+        ScreenText.render(chunks, for: snapshot(fieldText: fieldText, title: title), maxCharacters: maxCharacters)?
+            .components(separatedBy: "\n") ?? []
+    }
+
+    @Test(arguments: [[2, 0, 3, 1], [3, 2, 1, 0], [1, 3, 0, 2]])
+    func threadComesOutTopToBottom(_ order: [Int]) {
+        let thread = [oldest, older, newer, newest]
+        #expect(lines(order.map { thread[$0] }) == thread.map(\.text))
+    }
+
+    @Test func nearestTextAboveTheCaretComesLast() {
+        let result = lines([newest, below, oldest, newer, older])
+        #expect(result.last == newest.text)
+        #expect(result == [below.text, oldest.text, older.text, newer.text, newest.text])
+    }
+
+    @Test func sameRowReadsInTheDirectionOfItsScript() {
+        let left = TextChunk(text: "Left column says hello", frame: CGRect(x: 40, y: 300, width: 300, height: 40))
+        let right = TextChunk(text: "Right column says goodbye", frame: CGRect(x: 400, y: 305, width: 300, height: 30))
+        let rightArabic = TextChunk(text: "مرحبا بكم في الاجتماع", frame: CGRect(x: 400, y: 400, width: 300, height: 40))
+        let leftArabic = TextChunk(text: "شكرا جزيلا على الرد", frame: CGRect(x: 40, y: 405, width: 300, height: 30))
+        #expect(lines([right, leftArabic, left, rightArabic]) == [left.text, right.text, rightArabic.text, leftArabic.text])
+    }
+
+    @Test func budgetDropsTheFarthestChunk() {
+        let budget = [older, newer, newest].map(\.text.count).reduce(0, +) + 2
+        #expect(lines([oldest, older, newer, newest], maxCharacters: budget) == [older.text, newer.text, newest.text])
+    }
+
+    @Test func duplicatesTitlesAndFieldTextAreLeftOut() {
+        let copy = TextChunk(text: "  Yes, at ten in the   small room. ", frame: CGRect(x: 40, y: 80, width: 500, height: 40))
+        let title = TextChunk(text: "Team planning chat", frame: CGRect(x: 40, y: 40, width: 500, height: 30))
+        let draft = TextChunk(text: "Sure, I will bring it", frame: CGRect(x: 40, y: 600, width: 500, height: 30))
+        let result = lines([newest, copy, title, older, draft], fieldText: "Sure, I will bring it", title: "Team planning chat")
+        #expect(result == [older.text, newest.text])
     }
 }
