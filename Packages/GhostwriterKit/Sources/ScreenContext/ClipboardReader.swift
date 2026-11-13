@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import GWCore
 
 @MainActor
 public enum ClipboardReader {
@@ -29,6 +30,7 @@ public enum ClipboardReader {
     private static var appsSincePoll: Set<String> = []
     private static var activationObserver: (any NSObjectProtocol)?
     private static var monitor: Task<Void, Never>?
+    private static let presence = PresenceMonitor()
 
     /// True when the user set Ghostwriter to always paste from other apps in System Settings. Until then
     /// clipboard text stays unread, so suggestions never trigger the system's paste alert.
@@ -43,7 +45,7 @@ public enum ClipboardReader {
     }
 
     public static func startMonitoring() {
-        guard monitor == nil else { return }
+        guard activationObserver == nil else { return }
         lastChangeCount = NSPasteboard.general.changeCount
         appsSincePoll = frontmostBundleID().map { [$0] } ?? []
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -55,11 +57,24 @@ public enum ClipboardReader {
                 if let bundleID { appsSincePoll.insert(bundleID) }
             }
         }
+        presence.onChange = { isAway in
+            if isAway {
+                monitor?.cancel()
+            } else {
+                poll()
+            }
+        }
+        presence.start()
+        poll()
+    }
+
+    private static func poll() {
+        monitor?.cancel()
         monitor = Task { @MainActor in
             while !Task.isCancelled {
                 noteChange()
                 do {
-                    try await Task.sleep(for: .seconds(1))
+                    try await Task.sleep(for: .seconds(1), tolerance: .milliseconds(100))
                 } catch {
                     return
                 }
