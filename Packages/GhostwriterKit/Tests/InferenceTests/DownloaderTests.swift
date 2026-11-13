@@ -46,12 +46,13 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite struct DownloaderTests {
     let folder = FileManager.default.temporaryDirectory.appending(path: "gw-download-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let home = FileManager.default.temporaryDirectory.appending(path: "gw-home-\(UUID().uuidString)", directoryHint: .isDirectory)
     let body = Data((0..<200_000).map { UInt8(truncatingIfNeeded: $0 &* 31) })
 
     func makeDownloader() -> ModelDownloader {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
-        return ModelDownloader(folder: folder, configuration: configuration)
+        return ModelDownloader(folder: folder, configuration: configuration, home: home)
     }
 
     func makeSpec(_ reply: StubProtocol.Reply?) -> ModelSpec {
@@ -134,6 +135,40 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         let file = folder.appending(path: "hash.bin")
         try body.write(to: file)
         await #expect(throws: CancellationError.self) { try await ModelDownloader.sha256(of: file, isCancelled: { true }) }
+    }
+
+    func place(_ data: Data, at url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url)
+    }
+
+    @Test func verifiedLocalCopyIsLinkedWithoutDownloading() async throws {
+        let spec = makeSpec(nil)
+        let copy = try #require(LocalModelFinder(home: home).candidates(for: spec).last)
+        try place(body, at: copy)
+        let url = try await makeDownloader().download(spec) { _ in }
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: url.path) == copy.path)
+        #expect(try Data(contentsOf: url) == body)
+        #expect(StubProtocol.hits.withLock { $0[spec.fileName] } == nil)
+    }
+
+    @Test func localCopyWithOtherContentIsIgnored() async throws {
+        let spec = makeSpec(.init(status: 200, body: body))
+        let copy = try #require(LocalModelFinder(home: home).candidates(for: spec).first)
+        try place(Data(repeating: 0, count: body.count), at: copy)
+        let url = try await makeDownloader().download(spec) { _ in }
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) == nil)
+        #expect(try Data(contentsOf: url) == body)
+    }
+
+    @Test func danglingLinkIsReplacedByDownload() async throws {
+        let spec = makeSpec(.init(status: 200, body: body))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: folder.appending(path: spec.fileName), withDestinationURL: home.appending(path: "gone.gguf")
+        )
+        let url = try await makeDownloader().download(spec) { _ in }
+        #expect(try Data(contentsOf: url) == body)
     }
 
     @Test func spaceCheckNeedsSizePlusMargin() throws {

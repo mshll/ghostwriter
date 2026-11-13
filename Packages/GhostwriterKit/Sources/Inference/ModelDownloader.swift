@@ -8,17 +8,19 @@ public actor ModelDownloader {
     static let spaceMargin: Int64 = 512 << 20
 
     private let folder: URL
+    private let finder: LocalModelFinder
     private let delegate = DownloadDelegate()
     private let session: URLSession
     private var jobs: [String: DownloadJob] = [:]
     private let log = Logger.gw("download")
 
     public init() {
-        self.init(folder: AppPaths.models, configuration: .default)
+        self.init(folder: AppPaths.models, configuration: .default, home: FileManager.default.homeDirectoryForCurrentUser)
     }
 
-    init(folder: URL, configuration: URLSessionConfiguration) {
+    init(folder: URL, configuration: URLSessionConfiguration, home: URL) {
         self.folder = folder
+        finder = LocalModelFinder(home: home)
         session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     }
 
@@ -42,6 +44,15 @@ public actor ModelDownloader {
         let staging = folder.appending(path: spec.fileName + ".download")
         let destination = folder.appending(path: spec.fileName)
 
+        if Self.isDanglingLink(destination) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        if !FileManager.default.fileExists(atPath: destination.path),
+           let copy = try await localCopy(of: spec, isCancelled: { job.isCancelled }) {
+            try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: copy)
+            log.notice("Linked \(spec.fileName, privacy: .public) to a copy already on this Mac")
+            return destination
+        }
         // A complete staging file is left behind when a cancel lands during the checksum; verify it again instead.
         if !Self.hasSize(spec.sizeBytes, staging) {
             try Self.checkSpace(needed: spec.sizeBytes + Self.spaceMargin, available: availableSpace())
@@ -62,6 +73,25 @@ public actor ModelDownloader {
             try FileManager.default.moveItem(at: staging, to: destination)
         }
         return destination
+    }
+
+    private func localCopy(of spec: ModelSpec, isCancelled: @escaping @Sendable () -> Bool) async throws -> URL? {
+        guard let expected = spec.sha256 else { return nil }
+        for candidate in finder.candidates(for: spec) where Self.hasSize(spec.sizeBytes, candidate) {
+            do {
+                if try await Self.sha256(of: candidate, isCancelled: isCancelled) == expected { return candidate }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                log.error("Reading a local copy of \(spec.fileName, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return nil
+    }
+
+    private static func isDanglingLink(_ url: URL) -> Bool {
+        guard (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil else { return false }
+        return !FileManager.default.fileExists(atPath: url.path)
     }
 
     public func cancel(_ spec: ModelSpec) {
