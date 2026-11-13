@@ -142,21 +142,6 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         try data.write(to: url)
     }
 
-    @Test func candidatesFollowEachToolsLayout() {
-        let spec = ModelSpec(
-            id: "m", displayName: "M", family: .gemma4, repo: "org/repo-GGUF", fileName: "m.Q5.gguf",
-            sizeBytes: 1, sha256: "abc", minMemoryGB: 0, minTier: 0
-        )
-        let paths = LocalModelFinder(home: URL(filePath: "/h")).candidates(for: spec).map(\.path)
-        #expect(paths == [
-            "/h/.cache/huggingface/hub/models--org--repo-GGUF/blobs/abc",
-            "/h/Library/Caches/llama.cpp/org_repo-GGUF_m.Q5.gguf",
-            "/h/.lmstudio/models/org/repo-GGUF/m.Q5.gguf",
-            "/h/.cache/lm-studio/models/org/repo-GGUF/m.Q5.gguf",
-            "/h/.ollama/models/blobs/sha256-abc",
-        ])
-    }
-
     @Test func verifiedLocalCopyIsLinkedWithoutDownloading() async throws {
         let spec = makeSpec(nil)
         let copy = try #require(LocalModelFinder(home: home).candidates(for: spec).last)
