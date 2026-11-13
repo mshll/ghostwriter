@@ -6,6 +6,13 @@ private let reply = "Thanks for sending the figures over. I went through the for
 private let otherReply = "One more thing: could we move Thursday's review to the afternoon, so the finance team can join us as well?"
 private let draft = "I would also suggest that we schedule a short follow-up meeting next week to confirm the final numbers with everyone."
 
+private let messages = [
+    "Sounds good, see you at five",
+    "I'll bring the charger and the cables",
+    "Running ten minutes late, sorry!",
+    "Grab a table near the window",
+]
+
 private func shared(_ length: Int) -> String {
     let paragraph = "The committee reviewed the proposal in detail and agreed to revisit the budget at the next session.\n"
     return String(String(repeating: paragraph, count: length / paragraph.count + 1).prefix(length))
@@ -153,5 +160,60 @@ private func shared(_ length: Int) -> String {
         writing.inserted("the ", after: "Some text that the user later rewrote completely, ")
         writing.typed(after.count)
         #expect(writing.excerpt(of: before + "the " + after) == nil)
+    }
+
+    @Test func messagesSentFromOneFieldAreStoredTogether() {
+        var writing = FieldWriting(baseline: "")
+        for message in messages {
+            writing.typed(message.count)
+            writing.emptied(from: message, to: "", keepsMessage: true)
+        }
+        #expect(writing.excerpt(of: "") == messages.joined(separator: "\n"))
+    }
+
+    @Test func theDraftFollowsTheSentMessages() {
+        var writing = FieldWriting(baseline: "")
+        writing.typed(messages[0].count)
+        writing.emptied(from: messages[0], to: "", keepsMessage: true)
+        writing.typed(reply.count)
+        #expect(writing.excerpt(of: reply) == messages[0] + "\n" + reply)
+    }
+
+    @Test func aMessageTheUserDidNotTypeIsNotKept() {
+        var writing = FieldWriting(baseline: "")
+        writing.typed(3)
+        writing.emptied(from: draft, to: "", keepsMessage: true)
+        writing.typed(reply.count)
+        #expect(writing.excerpt(of: reply) == reply)
+    }
+
+    @Test func aMessageSentWhileRecordingIsNotAllowedIsNotKept() {
+        var writing = FieldWriting(baseline: "")
+        writing.typed(draft.count)
+        writing.emptied(from: draft, to: "", keepsMessage: false)
+        writing.typed(reply.count)
+        #expect(writing.excerpt(of: reply) == reply)
+    }
+
+    @Test func wordsAcceptedInAMessageAreLeftOutOfIt() {
+        var writing = FieldWriting(baseline: "")
+        writing.typed(messages[0].count)
+        writing.inserted(" then", after: messages[0])
+        writing.emptied(from: messages[0] + " then", to: "", keepsMessage: true)
+        writing.typed(reply.count)
+        #expect(writing.excerpt(of: reply) == messages[0] + "\n" + reply)
+    }
+
+    @Test func manyMessagesStoreTheMostRecentWithinTheCap() throws {
+        var writing = FieldWriting(baseline: "")
+        for index in 0..<400 {
+            let message = "\(index): " + messages[index % messages.count]
+            writing.typed(message.count)
+            writing.emptied(from: message, to: "\n", keepsMessage: true)
+        }
+        let excerpt = try #require(writing.excerpt(of: "\n"))
+        #expect(excerpt.count <= FieldWriting.maximumLength)
+        #expect(excerpt.count > FieldWriting.maximumLength - 200)
+        #expect(excerpt.hasSuffix("399: " + messages[399 % messages.count]))
     }
 }

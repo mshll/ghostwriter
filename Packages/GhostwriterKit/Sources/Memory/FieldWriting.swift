@@ -1,8 +1,8 @@
 import Foundation
 
-/// What the user wrote in one field since it was first focused: the lines that changed, without text
-/// Ghostwriter inserted. Holds the field's text at focus, counts of typed keys, and Ghostwriter's own
-/// insertions with the characters just before each.
+/// What the user wrote in one field since it was first focused: the messages sent from it, then the lines
+/// that changed since it was last emptied, without text Ghostwriter inserted. Holds the field's text at
+/// focus, counts of typed keys, and Ghostwriter's own insertions with the characters just before each.
 public struct FieldWriting: Sendable {
     public static let minimumTyped = 20
     public static let minimumLength = WritingSession.minimumCharacters
@@ -26,8 +26,10 @@ public struct FieldWriting: Sendable {
         case ambiguous
     }
 
-    private let baseline: String
-    private var typedTotal = 0
+    private var baseline: String
+    private var sent: [String] = []
+    public private(set) var sends = 0
+    private var typedInMessage = 0
     private var typedSinceFocus = 0
     private var insertionRuns: [[Insertion]] = []
     private var lastWasInsertion = false
@@ -36,7 +38,7 @@ public struct FieldWriting: Sendable {
         self.baseline = baseline
     }
 
-    public var hasTyped: Bool { typedTotal > 0 }
+    public var hasTyped: Bool { typedInMessage > 0 || !sent.isEmpty }
 
     public mutating func refocused() {
         typedSinceFocus = 0
@@ -44,7 +46,7 @@ public struct FieldWriting: Sendable {
     }
 
     public mutating func typed(_ count: Int) {
-        typedTotal += count
+        typedInMessage += count
         typedSinceFocus += count
         lastWasInsertion = false
     }
@@ -61,6 +63,26 @@ public struct FieldWriting: Sendable {
         lastWasInsertion = true
     }
 
+    /// The field went from `text` to `empty`, only whitespace, as a chat field does when a message is sent.
+    public mutating func emptied(from text: String, to empty: String, keepsMessage: Bool) {
+        if keepsMessage, let message = message(of: text), !message.isEmpty {
+            sent.append(message)
+            var length = sent.reduce(0) { $0 + $1.count + 1 }
+            while length > Self.maximumLength + 1, sent.count > 1 {
+                length -= sent.removeFirst().count + 1
+            }
+        }
+        sends += 1
+        baseline = empty
+        insertionRuns = []
+        typedInMessage = 0
+        lastWasInsertion = false
+    }
+
+    public static func isBlank(_ text: some StringProtocol) -> Bool {
+        text.allSatisfy(\.isWhitespace)
+    }
+
     private static func insertion(_ text: String, after textBefore: String, startsField: Bool) -> Insertion {
         let cut = textBefore.index(textBefore.endIndex, offsetBy: -anchorLength, limitedBy: textBefore.startIndex)
         return Insertion(
@@ -71,19 +93,27 @@ public struct FieldWriting: Sendable {
     }
 
     /// The text to store for `text`, the field's current contents, or nil when the user did not write
-    /// enough of it or an insertion cannot be told apart from the user's own text.
+    /// enough or an insertion cannot be told apart from the user's own text.
     public func excerpt(of text: String) -> String? {
-        guard typedSinceFocus >= Self.minimumTyped else { return nil }
-        let region = Self.changedRegion(from: baseline, to: text)
-        guard let inserted = insertedRanges(in: text, region: region) else { return nil }
-        let excerpt = Self.tail(of: Self.droppingQuotedLines(Self.removing(inserted, from: text, in: region)))
+        guard typedSinceFocus >= Self.minimumTyped, let draft = message(of: text) else { return nil }
+        let excerpt = Self.tail(of: (sent + [draft]).filter { !$0.isEmpty }.joined(separator: "\n"))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return excerpt.count >= Self.minimumLength ? excerpt : nil
     }
 
+    /// What the user wrote in `text` since the field was last emptied: empty when they typed fewer than
+    /// `minimumTyped` characters and fewer than it holds, nil when an insertion cannot be located.
+    private func message(of text: String) -> String? {
+        let region = Self.changedRegion(from: baseline, to: text)
+        guard let inserted = insertedRanges(in: text, region: region) else { return nil }
+        let message = Self.droppingQuotedLines(Self.removing(inserted, from: text, in: region))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return typedInMessage >= min(Self.minimumTyped, message.count) ? message : ""
+    }
+
     /// Finds a run of insertions as one span, else each insertion of the run on its own. Nil when an
     /// insertion is found more than once and the text before it does not tell which, when two overlap,
-    /// or when the inserted text no longer found is longer than all the user typed.
+    /// or when the inserted text no longer found is longer than all the user typed since the field was emptied.
     private func insertedRanges(in text: String, region: Range<String.Index>) -> [Range<String.Index>]? {
         var ranges: [Range<String.Index>] = []
         var notFound = 0
@@ -109,7 +139,7 @@ public struct FieldWriting: Sendable {
                 }
             }
         }
-        guard notFound <= typedTotal else { return nil }
+        guard notFound <= typedInMessage else { return nil }
         ranges.sort { $0.lowerBound < $1.lowerBound }
         guard zip(ranges, ranges.dropFirst()).allSatisfy({ $0.upperBound <= $1.lowerBound }) else { return nil }
         return ranges

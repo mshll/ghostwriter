@@ -241,6 +241,18 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
         晚上终于到了酒店，大家都累坏了，第二天早上我们去看了日出，风景非常美丽，回来以后每个人都晒黑了。
         """
 
+    @Test func messagesStoredTogetherComeBackAsWholeMessages() throws {
+        let messages = (0..<12).flatMap { index in
+            ["on my way, \(index) min", "grab us a table by the window", "ok see you soon!", "did you book the ferry for saturday?"]
+        } + ["bring the charger and both cables please"]
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("chat", messages.joined(separator: "\n"), app: "com.apple.MobileSMS"))
+        let found = try store.examples(query: "charger cables", bundleID: "com.apple.MobileSMS", language: nil, limit: 1, excludingKey: nil)
+        let passage = try #require(found.first)
+        #expect(passage.hasSuffix("bring the charger and both cables please"))
+        #expect(passage.split(separator: "\n").allSatisfy { messages.contains(String($0)) })
+    }
+
     @Test func textWithoutSpacesMatchesByCharacterPairs() throws {
         let store = try MemoryStore.inMemory()
         try store.upsertSession(session("budget", chineseBudget, language: "zh-Hans", age: 20 * day))
