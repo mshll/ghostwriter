@@ -257,14 +257,15 @@ final class Preferences {
         if status != launchAtLoginStatus { launchAtLoginStatus = status }
     }
 
+    private static let keptOnReset: Set<String> = ["hasCompletedOnboarding", "ignoredTypoWords", "selectedModelID"]
+
     func resetAll() {
-        let onboarded = hasCompletedOnboarding
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(Self.keyPrefix) {
+        for key in defaults.dictionaryRepresentation().keys
+        where key.hasPrefix(Self.keyPrefix) && !Self.keptOnReset.contains(String(key.dropFirst(Self.keyPrefix.count))) {
             defaults.removeObject(forKey: key)
         }
         KeyboardShortcuts.reset(KeyboardShortcuts.Name.global)
         revision += 1
-        hasCompletedOnboarding = onboarded
     }
 
     func restoreDefaultAcceptKeys() {

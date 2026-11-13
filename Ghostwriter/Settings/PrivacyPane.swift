@@ -113,7 +113,7 @@ enum PrivacySetting: SettingKey {
         case .recordedWriting: SettingText("Recorded writing", keywords: ["erase", "delete", "history", "texts"])
         case .dataFolder: SettingText("Writing, snippets and statistics", subtitle: "One database file on this Mac.", keywords: ["database", "folder", "finder", "files"])
         case .modelFiles: SettingText("Model files", keywords: ["folder", "finder", "gguf"])
-        case .reset: SettingText("Reset all settings", subtitle: "Restores every setting and shortcut. Your writing, snippets, app rules and models stay.", keywords: ["defaults", "restore"])
+        case .reset: SettingText("Reset all settings", subtitle: "Restores every setting and shortcut. Your writing, snippets, app rules, words not flagged and models stay.", keywords: ["defaults", "restore"])
         }
     }
 }
