@@ -5,7 +5,7 @@ import Memory
 import Prompting
 
 struct Options {
-    enum Task { case evaluate, bench, score, typing, swap, pause, typos, proofread }
+    enum Task { case evaluate, bench, score, typing, swap, pause, typos, proofread, decodeCurve }
     enum Backend { case llama, foundation }
 
     var backend = Backend.llama
@@ -44,6 +44,8 @@ struct Options {
     var exampleLimit = Personalization.appExampleLimit
     var biasStrength = Personalization.appBiasStrength
     var ranking = ExampleRanking()
+    var curveTokens = 16
+    var curveRepeats = 9
 
     /// The app's word cap for drafts; the default for `--mode draft`.
     static let draftWords = 80
@@ -52,6 +54,7 @@ struct Options {
         usage: gw-eval --set <jsonl> [--model <gguf>] [--variant <name>] [--beams N] [--top-k N] [--max-words N (inline: medium length, draft: 80)]
                        [--length-penalty X] [--floor X] [--confidence X] [--midline-confidence X] [--early-stop X] [--narrow-after N] [--narrow-stop P]
                        [--midline-bonus X] [--midline-margin X] [--midline-tokens N] [--midline-candidates N] [--no-echo-guard]
+                       [--midline-beams N (0: as --beams)] [--midline-rerank-every N (0: only when the search ends)] [--midline-budget N]
                        [--limit N] [--no-warm] [--no-after-section] [--no-screen] [--reverse-screen] [--screen-tokens N] [--total-tokens N] [--before-slack N] [--prompt standard|bare|no-preamble|no-environment] [--no-stop-strings] [--mode inline|draft] [--verbose] [--json out.json]
                        [--first-shown]   (score the first suggestion streamed, not the final one)
                        [--history <jsonl>]   (writing history from eval/scripts/build_history_set.py: examples and word bias as in the app)
@@ -71,6 +74,8 @@ struct Options {
                gw-eval --typos <jsonl> [--model <gguf>] [--limit N] [--verbose] [--json out.json]
                        (spell checker and model judge on word rows of eval/data/typos.jsonl: offers, auto-fixes, false flags)
                gw-eval --proofread <jsonl> [--limit N] [--verbose] [--json out.json]   (fix grammar with Apple's on-device model on sentence rows)
+               gw-eval --decode-curve --set <jsonl> [--limit N (3)] [--curve-tokens N (16)] [--curve-repeats N (9)]
+                       (GPU decode time by batch size after each row's prompt)
                gw-eval --download <catalog id>
         variants: \(Variant.names.joined(separator: ", "))
         """
@@ -112,6 +117,15 @@ struct Options {
                 guard let variant = PromptVariant(rawValue: name) else { throw UsageError("unknown prompt variant \(name)") }
                 options.promptVariant = variant
             case "--bench": options.task = .bench
+            case "--decode-curve": options.task = .decodeCurve
+            case "--curve-tokens":
+                let x: Int = try number(flag)
+                guard x > 0 else { throw UsageError("--curve-tokens must be above 0") }
+                options.curveTokens = x
+            case "--curve-repeats":
+                let x: Int = try number(flag)
+                guard x > 0 else { throw UsageError("--curve-repeats must be above 0") }
+                options.curveRepeats = x
             case "--score": options.task = .score
             case "--typing": options.task = .typing
             case "--typos":
@@ -201,6 +215,18 @@ struct Options {
             case "--midline-candidates":
                 let x: Int = try number(flag)
                 overrides.append { $0.midLineCandidates = x }
+            case "--midline-beams":
+                let x: Int = try number(flag)
+                guard x >= 0 else { throw UsageError("--midline-beams must be 0 or more") }
+                overrides.append { $0.midLineBeams = x == 0 ? nil : x }
+            case "--midline-rerank-every":
+                let x: Int = try number(flag)
+                guard x >= 0 else { throw UsageError("--midline-rerank-every must be 0 or more") }
+                overrides.append { $0.midLineRerankInterval = x }
+            case "--midline-budget":
+                let x: Int = try number(flag)
+                guard x > 0 else { throw UsageError("--midline-budget must be above 0") }
+                overrides.append { $0.midLineDecodeBudget = x }
             case "--midline-margin":
                 let x: Double = try number(flag)
                 overrides.append { $0.midLineMargin = x }

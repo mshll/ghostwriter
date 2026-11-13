@@ -196,10 +196,27 @@ final class Scheduler {
             if !midLineScored.contains(bytes) { midLineScored.append(bytes) }
         }
         if midLineScored.count > 64 { midLineScored.removeFirst(midLineScored.count - 64) }
-        let missing = session.unscored(plan, in: rerankTotals)
+        let interval = target.request.tuning.midLineRerankInterval
+        guard interval > 0, search.steps % interval == 0 else { return nil }
         let limit = session.freeSequenceCount - search.sequencesNeeded
-        guard !missing.isEmpty, limit > 0 else { return nil }
-        return session.rerankBatch(Array(missing.prefix(limit)), room: search.batchRoom)
+        guard limit > 0 else { return nil }
+        var missing = Array(session.unscored(plan, in: rerankTotals).prefix(limit))
+        if let budget = target.request.tuning.midLineDecodeBudget {
+            missing = Self.fitting(missing, room: budget - search.liveCount)
+        }
+        guard !missing.isEmpty else { return nil }
+        return session.rerankBatch(missing, room: search.batchRoom)
+    }
+
+    /// The sequences, in order, whose decode entries fit in `room` tokens; one that does not fit is skipped.
+    static func fitting(_ sequences: [[Int32]], room: Int) -> [[Int32]] {
+        var left = room
+        return sequences.filter { tokens in
+            let cost = max(tokens.count - 1, 0)
+            guard cost <= left else { return false }
+            left -= cost
+            return true
+        }
     }
 
     private func finalRerankIsScored(_ search: BeamSearch) -> Bool {

@@ -35,11 +35,18 @@ public struct SearchTuning: Sendable, Hashable {
     public var narrowedStopProbability: Double = 0.3
     public var maxCandidates: Int = 6
     public var earlyStopMargin: Double? = 0
-    public var midLineContextTokens: Int = 4
+    public var midLineContextTokens: Int = 1
     public var blocksEchoes: Bool = true
     public var midLineCandidates: Int = 3
     public var midLineWordBonus: Double = 2
     public var midLineMargin: Double = 0
+    /// Beam width when text follows the caret; nil keeps the request's width.
+    public var midLineBeams: Int? = 4
+    /// Beam steps per streamed mid-line rerank; 0 scores mid-line candidates only when the search ends.
+    public var midLineRerankInterval = 1
+    /// Most tokens in the decode of a beam step and its streamed rerank. Rerank sequences that do not fit wait
+    /// for a later step. GPU decode time jumps once a batch passes about 8 tokens (`gw-eval --decode-curve`).
+    public var midLineDecodeBudget: Int?
     public var reusesBeams = true
 
     public init() {}
