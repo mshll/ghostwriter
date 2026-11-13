@@ -68,6 +68,27 @@ struct SectionFitter {
         return hardLength > 0 ? cut.marked(hardLength) : ""
     }
 
+    /// Keeps the end of `text` in `budget` tokens, then keeps the same start while the text grows by up to `slack`
+    /// tokens: the prompt start changes once per `slack` tokens typed, not once per sentence.
+    func fitEnd(_ text: Substring, budget: Int, slack: Int, anchor: String?) -> (text: String, anchor: String?) {
+        guard budget > 0, !text.isEmpty else { return ("", nil) }
+        let (window, clipped) = window(text, budget: budget + slack, keep: .end)
+        if !clipped, counter.countTokens(String(window)) <= budget { return (String(window), nil) }
+        if let anchor, let kept = Self.kept(window, from: anchor), counter.countTokens(kept) <= budget + slack {
+            return (kept, anchor)
+        }
+        let kept = fit(text, budget: budget, keep: .end)
+        return (kept, kept.isEmpty ? nil : String(kept.prefix(Self.anchorLength)))
+    }
+
+    static let anchorLength = 64
+
+    private static func kept(_ window: Substring, from anchor: String) -> String? {
+        let marked = anchor.hasPrefix(marker)
+        guard let range = window.firstRange(of: marked ? anchor.dropFirst(marker.count) : anchor[...]) else { return nil }
+        return (marked ? marker : "") + window[range.lowerBound...]
+    }
+
     private func window(_ text: Substring, budget: Int, keep: Keep) -> (text: Substring, clipped: Bool) {
         let maxCharacters = budget * Self.maxCharactersPerToken
         switch keep {

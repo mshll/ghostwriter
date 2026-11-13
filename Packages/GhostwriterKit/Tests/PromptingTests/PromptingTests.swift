@@ -281,6 +281,67 @@ let englishParagraph = """
     }
 }
 
+@Suite struct StableCut {
+    let fitter = SectionFitter(counter: QuarterCounter())
+    let sentences = (1...40).map { "Sentence number \($0) is here. " }.joined()
+
+    @Test func textThatFitsIsKeptWholeWithoutAnAnchor() {
+        let cut = fitter.fitEnd("Short text."[...], budget: 10, slack: 8, anchor: nil)
+        #expect(cut.text == "Short text.")
+        #expect(cut.anchor == nil)
+    }
+
+    @Test func firstCutIsTheBudgetCut() {
+        let cut = fitter.fitEnd(sentences[...], budget: 16, slack: 8, anchor: nil)
+        #expect(cut.text == fitter.fit(sentences[...], budget: 16, keep: .end))
+        #expect(cut.anchor.map(cut.text.hasPrefix) == true)
+    }
+
+    @Test func typingKeepsTheStartUntilTheSlackIsUsed() {
+        func breaks(slack: Int) -> Int {
+            var text = sentences
+            var cut = fitter.fitEnd(text[...], budget: 16, slack: slack, anchor: nil)
+            var breaks = 0
+            for character in (1...40).map({ "Word \($0) typed after it. " }).joined() {
+                text.append(character)
+                let next = fitter.fitEnd(text[...], budget: 16, slack: slack, anchor: cut.anchor)
+                #expect(QuarterCounter().countTokens(next.text) <= 16 + slack)
+                if !next.text.hasPrefix(cut.text) { breaks += 1 }
+                cut = next
+            }
+            return breaks
+        }
+        #expect(breaks(slack: 16) * 4 <= breaks(slack: 0))
+    }
+
+    @Test func hardCutKeepsItsMarkerWhileTheTextGrows() {
+        let text = (1...60).map(String.init).joined()
+        let first = fitter.fitEnd(text[...], budget: 10, slack: 8, anchor: nil)
+        let next = fitter.fitEnd((text + "abc")[...], budget: 10, slack: 8, anchor: first.anchor)
+        #expect(first.text.hasPrefix(SectionFitter.marker))
+        #expect(next.text == first.text + "abc")
+        #expect(next.anchor == first.anchor)
+    }
+
+    @Test func missingAnchorCutsAgain() {
+        let cut = fitter.fitEnd(sentences[...], budget: 16, slack: 8, anchor: "Text that is not in the field.")
+        #expect(cut.text == fitter.fit(sentences[...], budget: 16, keep: .end))
+    }
+
+    @Test func builderReturnsTheAnchorForInlinePromptsOnly() {
+        var budgets = PromptBudgets()
+        budgets.before = 16
+        budgets.beforeSlack = 8
+        let builder = makeBuilder(budgets)
+        let first = builder.build(PromptContext(appName: "Notes", textBefore: sentences))
+        let next = builder.build(PromptContext(appName: "Notes", textBefore: sentences + "And", beforeAnchor: first.beforeAnchor))
+        let draft = builder.build(PromptContext(appName: "Notes", textBefore: sentences, mode: .draft, beforeAnchor: first.beforeAnchor))
+        #expect(first.beforeAnchor != nil)
+        #expect(next.text.hasPrefix(first.text))
+        #expect(draft.beforeAnchor == nil)
+    }
+}
+
 @Suite struct PartialWords {
     @Test(arguments: [
         ("Thanks for the upd", "Thanks for the ", "upd"),

@@ -51,6 +51,8 @@ llama.cpp keeps the decoded prompt in its KV cache. When you type, only the end 
 
 Each section has a token budget (`PromptBudgets`). The text before and after the caret get their share first, so the context sections keep the same size while you type and the cache stays valid.
 
+When the text before the caret is longer than its budget (350 tokens), its start is cut at a paragraph, sentence or word. While you type, the prompt keeps that start until the text has grown 96 tokens past the budget, and only then cuts again. So the start of your text in the prompt changes about once per 96 tokens typed, not once per sentence, and each change decodes the whole section again.
+
 ### 4. Engine
 
 `CompletionEngine` runs llama.cpp on the GPU. One context of 4,096 tokens holds the prompt and every candidate.
