@@ -65,7 +65,7 @@ Each section has a token budget (`PromptBudgets`). The text before and after the
 
 **Growing phrases.** Each step publishes its finished candidates and its live beams cut to the last whole word. A phrase shows as soon as its first word is known and grows while the search continues. While you type, a shown suggestion is replaced only by one that extends it, so the text does not change under your eyes. When you pause, a finished search can replace the shown suggestion with its best candidate 300 ms after the key press.
 
-**Mid-line.** In the middle of a line, a candidate must fit the text after the caret. Each candidate is scored together with the first tokens after the caret, and must score better than inserting nothing. These scores are decoded in the same batch as the next beam step, so they cost little extra time.
+**Mid-line.** In the middle of a line, a candidate must fit the text after the caret. Each candidate is scored together with the first token after the caret, and must score better than inserting nothing. These scores are decoded in the same batch as the next beam step. The search keeps 4 beams instead of 6 here: a decode of up to 8 tokens takes about 40 ms, and one of 9 or more takes 70 ms or more (`gw-eval --decode-curve`), so fewer beams and shorter scores keep more steps under that limit.
 
 **Drafts.** A long draft streams the text that all live beams have in common, cut to whole words. Streamed words never change.
 
