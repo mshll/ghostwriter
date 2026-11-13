@@ -79,7 +79,7 @@ When the text before the caret is longer than its budget (350 tokens), its start
 
 ### 5. Display and accept
 
-`Overlay` draws the suggestion in a transparent panel at the caret, in the field's font, with right-to-left support. In the middle of a line it samples the field's background so the ghost text covers the text after the caret cleanly. When the app does not tell where the caret is and the field holds text, the suggestion shows just below the field (or above it, at the bottom of the screen), so it never covers what you wrote.
+`Overlay` draws the suggestion in a transparent panel at the caret, in the field's font, with right-to-left support. In the middle of a line it samples the field's background so the ghost text covers the text after the caret cleanly. When the app does not tell where the caret is and the field holds text, the suggestion, the emoji picker, notices and selection actions show just below the field (or above it, at the bottom of the screen), so they never cover what you wrote.
 
 `Input` watches the accept keys. Tab and the key above Tab act only while a suggestion shows. `TextInserter` types the accepted text with key events, or pastes it in apps that need that. Every event that Ghostwriter posts carries the `EventMarker` tag, and Ghostwriter ignores events with that tag, so it never reacts to its own typing.
 

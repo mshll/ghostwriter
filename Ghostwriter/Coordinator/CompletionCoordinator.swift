@@ -1176,7 +1176,7 @@ final class CompletionCoordinator {
         notice?.cancel()
         notice = nil
         overlay.hide()
-        return overlay.showStatus(text, detail: "\(key == .tab ? "⇥" : key.displayName) fixes", near: snapshot.caretRect)
+        return overlay.showStatus(text, detail: "\(key == .tab ? "⇥" : key.displayName) fixes", near: PopupAnchor.rect(for: snapshot))
     }
 
     private func acceptTypos() {
@@ -1281,7 +1281,8 @@ final class CompletionCoordinator {
             return false
         }
         emoji = (query, results.map(\.emoji))
-        overlay.showPicker(results.map { PickerItem(title: $0.emoji, detail: $0.name) }, near: snapshot.caretRect) { [weak self] index in
+        let items = results.map { PickerItem(title: $0.emoji, detail: $0.name) }
+        overlay.showPicker(items, near: PopupAnchor.rect(for: snapshot)) { [weak self] index in
             self?.pickEmoji(index)
         }
         var bindings: [(HotKey, @MainActor @Sendable () -> Void)] = []
@@ -1397,7 +1398,7 @@ final class CompletionCoordinator {
                 NSSound.beep()
                 return
             }
-            self.showSelectionActions(for: snapshot, near: snapshot.caretRect, takesFocus: true)
+            self.showSelectionActions(for: snapshot, near: PopupAnchor.rect(for: snapshot), takesFocus: true)
         }
     }
 
@@ -1436,7 +1437,7 @@ final class CompletionCoordinator {
                   !self.selectionActions.isPresented
             else { return }
             self.autoShownSelection = selected
-            self.showSelectionActions(for: field, near: self.pointerMovedLast ? .zero : field.caretRect, takesFocus: false)
+            self.showSelectionActions(for: field, near: self.pointerMovedLast ? .zero : PopupAnchor.rect(for: field), takesFocus: false)
         }
     }
 
@@ -1584,7 +1585,7 @@ final class CompletionCoordinator {
         for duration: Duration? = CompletionCoordinator.noticeDuration
     ) {
         notice?.cancel()
-        guard overlay.showStatus(text, detail: detail, busy: busy, near: snapshot.caretRect) else {
+        guard overlay.showStatus(text, detail: detail, busy: busy, near: PopupAnchor.rect(for: snapshot)) else {
             notice = nil
             return
         }
