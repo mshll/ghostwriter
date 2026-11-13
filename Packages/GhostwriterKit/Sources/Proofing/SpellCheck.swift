@@ -22,21 +22,27 @@ public enum SpellCheck {
     static let maxGuesses = 4
     static let sentenceEnds: Set<Character> = [".", "!", "?", "\n", "。", "！", "？", "؟"]
     private static let attachedToWord: Set<Character> = ["@", "#", "/", "\\", "_", "-", ":", "$", "%", "&", "=", "+", "~", "`", "*"]
+    private static let apostrophes: Set<Character> = ["'", "\u{2019}"]
 
     public static func endsSentence(_ text: String) -> Bool {
         text.last.map { sentenceEnds.contains($0) && !$0.isNewline } ?? false
     }
 
     /// Whether a space or punctuation ends `textBefore`: only then can `lastWord` or `sentence` find a misspelling.
+    /// An apostrophe right after a letter can still continue the word, as in "isn't" or "aujourd'hui".
     public static func finishesWord(_ textBefore: String) -> Bool {
-        textBefore.last.map { $0.isWhitespace || $0.isPunctuation } ?? false
+        guard let last = textBefore.last else { return false }
+        if apostrophes.contains(last) { return !(textBefore.dropLast().last?.isLetter ?? false) }
+        return last.isWhitespace || last.isPunctuation
     }
 
-    /// The word that a space or punctuation has just finished.
+    /// The word that a space or punctuation has just finished, with any apostrophes that end it.
     public static func lastWord(in textBefore: String, language: String?) -> Misspelling? {
         guard finishesWord(textBefore) else { return nil }
-        guard let token = tokens(in: Array(textBefore)).last, token.end == textBefore.count - 1 else { return nil }
-        return check(token, in: Array(textBefore), language: language)
+        let characters = Array(textBefore)
+        guard let token = tokens(in: characters).last,
+              characters[token.end..<(characters.count - 1)].allSatisfy(apostrophes.contains) else { return nil }
+        return check(token, in: characters, language: language)
     }
 
     /// Every misspelled word in the sentence that ends `textBefore`.
@@ -78,13 +84,13 @@ public enum SpellCheck {
     private static func isWordCharacter(_ characters: [Character], at offset: Int, start: Int?) -> Bool {
         let character = characters[offset]
         if character.isLetter || character.isNumber { return true }
-        guard start != nil, character == "'" || character == "\u{2019}", offset + 1 < characters.count else { return false }
+        guard start != nil, apostrophes.contains(character), offset + 1 < characters.count else { return false }
         return characters[offset + 1].isLetter
     }
 
     static func isCheckable(_ token: Token, in characters: [Character]) -> Bool {
         let word = token.word
-        guard word.count >= 3, word.allSatisfy({ $0.isLetter || $0 == "'" || $0 == "\u{2019}" }) else { return false }
+        guard word.count >= 3, word.allSatisfy({ $0.isLetter || apostrophes.contains($0) }) else { return false }
         if word.dropFirst().contains(where: \.isUppercase) { return false }
         if let first = word.first, first.isUppercase, !isSentenceStart(token.start, in: characters) { return false }
         if token.start > 0, attachedToWord.contains(characters[token.start - 1]) || characters[token.start - 1] == "." { return false }

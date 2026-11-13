@@ -85,7 +85,7 @@ When the text before the caret is longer than its budget (350 tokens), its start
 
 ### Typo fixes
 
-When a space or punctuation finishes a word, `Proofing` asks the system spell checker whether the word is misspelled and for its guesses. The engine then scores the typed word and each guess as the continuation of the same prompt. A fix is offered when a guess is clearly more likely than the typed word, so names, jargon and words from another language that the model expects stay unflagged. Words that appear in several of your recorded writing sessions are never flagged. At the end of a sentence the same check runs on every word of the sentence. `gw-eval --typos` measures the thresholds ([EVALUATION.md](EVALUATION.md)).
+When a space or punctuation finishes a word, `Proofing` asks the system spell checker whether the word is misspelled and for its guesses. An apostrophe after a letter does not finish the word, so contractions and elisions such as "isn't" and "aujourd'hui" are checked whole. The engine then scores the typed word and each guess as the continuation of the same prompt. A fix is offered when a guess is clearly more likely than the typed word, so names, jargon and words from another language that the model expects stay unflagged. Words that appear in several of your recorded writing sessions are never flagged. At the end of a sentence the same check runs on every word of the sentence. `gw-eval --typos` measures the thresholds ([EVALUATION.md](EVALUATION.md)).
 
 Automatic fixes need a larger margin, and the best guess must lead the next one, so a word with two plausible fixes is offered, not fixed. They run only in English, French, German and Spanish, where `gw-eval --typos` measured them right about 98% of the time.
 

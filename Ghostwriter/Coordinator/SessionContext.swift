@@ -37,7 +37,7 @@ struct ContextRequest {
         self.sessionKey = sessionKey
         screenOptions = ScreenContextOptions()
         screenOptions.allowOCR = allowOCR
-        screenOptions.language = LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(600)))
+        screenOptions.language = LanguageDetector.language(ofTextBefore: snapshot.textBefore)
             ?? snapshot.language
     }
 
@@ -65,7 +65,7 @@ struct ContextRequest {
         guard let memory, limit > 0 else { return [] }
         let query = String(snapshot.textBefore.suffix(600))
         let field = MemoryStore.fieldText(before: snapshot.textBefore, after: snapshot.textAfter)
-        let language = LanguageDetector.dominantLanguage(of: query)
+        let language = LanguageDetector.language(ofTextBefore: snapshot.textBefore)
         let bundleID = snapshot.app.bundleID
         return await Task.detached {
             do {
