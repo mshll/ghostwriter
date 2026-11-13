@@ -100,6 +100,8 @@ Ghostwriter runs a base (pretrained) model through [llama.cpp](https://github.co
 | Gemma 3 4B | 2.5 GB | Smaller download, a little slower. |
 | Gemma 3 1B | 0.8 GB | Macs with 8 GB of memory. |
 
+If the same file is already on your Mac from the Hugging Face cache, llama.cpp, LM Studio or Ollama, Ghostwriter links to it instead of downloading it again.
+
 To use your own model, put a base `.gguf` file in `~/Library/Application Support/com.mshl.ghostwriter/Models/` and click Refresh in Settings > Model. Each model has its own license; Gemma models are provided under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 
 [docs/MODELS.md](docs/MODELS.md) explains why base models, and how these were selected and measured.

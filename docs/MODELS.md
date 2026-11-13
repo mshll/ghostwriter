@@ -18,7 +18,7 @@ Which models Ghostwriter offers for autocomplete, and why.
 | Gemma 3 4B | i1-Q4_K_M |
 | Gemma 3 1B | i1-Q4_K_M |
 
-The files are importance-matrix quantizations from [mradermacher](https://huggingface.co/mradermacher). Each is pinned to a repository revision and checked against its SHA-256 after download (`Inference/Catalog.swift`). The app recommends a model from the Mac's memory and chip. Download sizes and how to add your own base model are in the [README](../README.md#models).
+The files are importance-matrix quantizations from [mradermacher](https://huggingface.co/mradermacher). Each is pinned to a repository revision and checked against its SHA-256 after download (`Inference/Catalog.swift`). Before downloading, the app looks for a file with the same size and SHA-256 in the Hugging Face cache, llama.cpp, LM Studio and Ollama, and links to it instead (`Inference/LocalModelFinder.swift`). The app recommends a model from the Mac's memory and chip. Download sizes and how to add your own base model are in the [README](../README.md#models).
 
 ## Why these
 
