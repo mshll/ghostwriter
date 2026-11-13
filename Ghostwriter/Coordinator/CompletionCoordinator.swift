@@ -14,6 +14,7 @@ import os
 
 final class CompletionCoordinator {
     nonisolated private static let log = Logger.gw("Coordinator")
+    nonisolated private static let signposter = OSSignposter(logger: log)
     private static let typingWindow: Duration = .milliseconds(1500)
     private static let deletePause: Duration = .milliseconds(400)
     private static let autoSelectionDelay: Duration = .milliseconds(350)
@@ -209,6 +210,8 @@ final class CompletionCoordinator {
     // MARK: Field events
 
     private func handle(_ event: FocusEvent) {
+        let signpost = Self.signposter.beginInterval("FieldEvent")
+        defer { Self.signposter.endInterval("FieldEvent", signpost) }
         switch event {
         case .focused(let snapshot), .changed(let snapshot):
             if field?.id == snapshot.id {
@@ -334,6 +337,8 @@ final class CompletionCoordinator {
     // MARK: Keys
 
     private func handleKey(_ event: KeyEvent) {
+        let signpost = Self.signposter.beginInterval("Key")
+        defer { Self.signposter.endInterval("Key", signpost) }
         let pressed = HotKey(keyCode: event.keyCode, modifierFlags: NSEvent.ModifierFlags(rawValue: event.modifiers))
         guard !registeredKeys.contains(pressed) else { return }
         pointerMovedLast = false
@@ -771,6 +776,8 @@ final class CompletionCoordinator {
     // MARK: Showing suggestions
 
     private func present(_ texts: [String], from snapshot: FieldSnapshot, kind: ActiveSuggestion.Kind, settled: Bool) {
+        let signpost = Self.signposter.beginInterval("Present")
+        defer { Self.signposter.endInterval("Present", signpost) }
         let candidates = texts.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard let current = field, current.id == snapshot.id, !candidates.isEmpty, emoji == nil, !editedSinceRead,
               Self.restOfLine(current.textAfter) == Self.restOfLine(snapshot.textAfter) else { return }

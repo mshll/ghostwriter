@@ -3,6 +3,7 @@ import CoreGraphics
 import Foundation
 import GWCore
 import os
+import Synchronization
 
 struct AXFailure: Error {
     let code: AXError
@@ -12,6 +13,9 @@ struct AXFailure: Error {
 struct AXElement: @unchecked Sendable, Hashable {
     static let messagingTimeout: Float = 0.25
     private static let log = Logger.gw("capture.ax")
+    private static let calls = Atomic<Int>(0)
+
+    static var callCount: Int { calls.load(ordering: .relaxed) }
 
     let ref: AXUIElement
 
@@ -43,12 +47,14 @@ struct AXElement: @unchecked Sendable, Hashable {
     }
 
     func value(_ attribute: String) throws(AXFailure) -> CFTypeRef? {
+        Self.countCall()
         var value: CFTypeRef?
         let error = AXUIElementCopyAttributeValue(ref, attribute as CFString, &value)
         return try Self.check(error) ? value : nil
     }
 
     func values(_ attributes: [String]) throws(AXFailure) -> [String: CFTypeRef] {
+        Self.countCall()
         var array: CFArray?
         let error = AXUIElementCopyMultipleAttributeValues(ref, attributes as CFArray, [], &array)
         guard try Self.check(error), let items = array as? [AnyObject], items.count == attributes.count else { return [:] }
@@ -60,12 +66,14 @@ struct AXElement: @unchecked Sendable, Hashable {
     }
 
     func parameterized(_ attribute: String, _ parameter: CFTypeRef) throws(AXFailure) -> CFTypeRef? {
+        Self.countCall()
         var value: CFTypeRef?
         let error = AXUIElementCopyParameterizedAttributeValue(ref, attribute as CFString, parameter, &value)
         return try Self.check(error) ? value : nil
     }
 
     func isSettable(_ attribute: String) throws(AXFailure) -> Bool {
+        Self.countCall()
         var settable: DarwinBoolean = false
         let error = AXUIElementIsAttributeSettable(ref, attribute as CFString, &settable)
         return try Self.check(error) && settable.boolValue
@@ -73,7 +81,8 @@ struct AXElement: @unchecked Sendable, Hashable {
 
     @discardableResult
     func set(_ attribute: String, _ value: CFTypeRef) -> AXError {
-        AXUIElementSetAttributeValue(ref, attribute as CFString, value)
+        Self.countCall()
+        return AXUIElementSetAttributeValue(ref, attribute as CFString, value)
     }
 
     func string(_ attribute: String) throws(AXFailure) -> String? {
@@ -82,6 +91,10 @@ struct AXElement: @unchecked Sendable, Hashable {
 
     func element(_ attribute: String) throws(AXFailure) -> AXElement? {
         AXDecode.element(try value(attribute))
+    }
+
+    private static func countCall() {
+        calls.add(1, ordering: .relaxed)
     }
 
     private static func check(_ error: AXError) throws(AXFailure) -> Bool {
