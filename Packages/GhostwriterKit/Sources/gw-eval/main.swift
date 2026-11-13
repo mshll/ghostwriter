@@ -211,6 +211,7 @@ func evaluate(_ options: Options, set: URL) async throws {
         latency cold p50/p95 \(format(summary.coldP50, 0)) / \(format(summary.coldP95, 0)) ms
         latency warm p50/p95 \(format(summary.warmP50, 0)) / \(format(summary.warmP95, 0)) ms
         prefill \(format(summary.prefillTokensPerSecond, 0)) tok/s   step \(format(summary.stepMilliseconds)) ms   steps/row \(format(summary.meanSteps))
+        mid-line rerank p50/p95 \(format(summary.rerankP50)) / \(format(summary.rerankP95)) ms
         """)
 
     if options.draft {

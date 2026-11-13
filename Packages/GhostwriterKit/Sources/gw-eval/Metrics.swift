@@ -170,6 +170,8 @@ struct Summary: Codable {
     var prefillTokensPerSecond: Double
     var stepMilliseconds: Double
     var meanSteps: Double
+    var rerankP50: Double?
+    var rerankP95: Double?
 
     init(results: [RowResult], options: Options) {
         func mean(_ values: [Double]) -> Double? { values.isEmpty ? nil : values.reduce(0, +) / Double(values.count) }
@@ -210,5 +212,8 @@ struct Summary: Codable {
         let steps = results.reduce(0) { $0 + $1.steps }
         stepMilliseconds = steps > 0 ? results.reduce(0) { $0 + $1.searchMilliseconds } / Double(steps) : 0
         meanSteps = mean(results.map { Double($0.steps) }) ?? 0
+        let rerank = midLine.map(\.rerankMilliseconds)
+        rerankP50 = rerank.isEmpty ? nil : Metrics.percentile(rerank, 0.5)
+        rerankP95 = rerank.isEmpty ? nil : Metrics.percentile(rerank, 0.95)
     }
 }

@@ -24,6 +24,7 @@ struct ClockedResult: Encodable {
     var busy: Double
     var elapsed: Double
     var units: Int
+    var unitMilliseconds: [Double] = []
     var requests: Int
 }
 
@@ -51,6 +52,7 @@ func simulateClocked(_ options: Options, set: URL, mode: EngineMode) async throw
         let ready100 = 1 - Double(waits.filter { $0 > 100 }.count) / Double(max(keystrokes, 1))
         let busy = members.map(\.busy).reduce(0, +) / max(members.map(\.elapsed).reduce(0, +), 1)
         let bad = Double(members.map(\.badShown).reduce(0, +)) / Double(max(shown, 1))
+        let units = members.flatMap(\.unitMilliseconds)
         return [
             String(members.count).leftPadded(5),
             percent(Double(characters - keystrokes) / Double(max(characters, 1))).leftPadded(7),
@@ -65,9 +67,11 @@ func simulateClocked(_ options: Options, set: URL, mode: EngineMode) async throw
             percent(interval == nil ? nil : busy).leftPadded(7),
             percent(bad).leftPadded(6),
             format(100 * Double(members.map(\.replaced).reduce(0, +)) / Double(max(keystrokes, 1)), 2).leftPadded(9),
+            format(Metrics.percentile(units, 0.5), 1).leftPadded(8),
+            format(Metrics.percentile(units, 0.95), 1).leftPadded(7),
         ].joined(separator: " ")
     }
-    let columns = " rows   saved  useful  words  single    gaps  wait50 wait95    late  ready100    busy    bad  flicker%"
+    let columns = " rows   saved  useful  words  single    gaps  wait50 wait95    late  ready100    busy    bad  flicker%  unit50 unit95"
     printGroups("lang", results, key: \.lang, columns: columns, line: line)
     printGroups("kind", results, key: { $0.midLine ? "midline" : "lineend" }, columns: columns, line: line)
     if let json = options.json {
@@ -214,6 +218,7 @@ private struct ClockedRow {
                     clock += unit.milliseconds
                     result.busy += unit.milliseconds
                     result.units += 1
+                    result.unitMilliseconds.append(unit.milliseconds)
                     pending += unit.publications.map { (clock, $0) }
                     continue
                 }
@@ -223,6 +228,7 @@ private struct ClockedRow {
                     clock += unit.milliseconds
                     result.busy += unit.milliseconds
                     result.units += 1
+                    result.unitMilliseconds.append(unit.milliseconds)
                     for publication in unit.publications { try apply(publication, at: clock) }
                 }
                 nextKeystroke = clock
