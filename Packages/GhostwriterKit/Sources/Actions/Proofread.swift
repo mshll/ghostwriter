@@ -38,6 +38,13 @@ public struct Proofread: Sendable, Hashable {
 
     public var insertion: String { String(corrected.dropFirst(keptCount)) }
 
+    /// `insertion` from the start of its first word, and the characters before the caret it replaces.
+    public var replacement: (deleteCount: Int, text: String) {
+        let kept = corrected.prefix(keptCount)
+        let head = kept.reversed().prefix { !$0.isWhitespace }.count
+        return (deleteCount + head, String(corrected.dropFirst(keptCount - head)))
+    }
+
     private var keptCount: Int { zip(original, corrected).prefix { $0 == $1 }.count }
 
     public var changes: [Change] {

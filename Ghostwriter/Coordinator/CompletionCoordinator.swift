@@ -1194,6 +1194,7 @@ final class CompletionCoordinator {
         }
         let edit = Proofread(original: tail.original, corrected: tail.corrected)
         apply(edit, in: snapshot)
+        recordCorrection(edit, in: snapshot)
         return edit
     }
 
@@ -1308,6 +1309,7 @@ final class CompletionCoordinator {
             await TextInserter.deleteBackward(count: length, in: pid)
             await TextInserter.insert(choice, into: pid, mode: mode)
         }
+        recorder.inserted(choice, into: snapshot.id, after: String(snapshot.textBefore.dropLast(length)))
         recordAcceptance(of: choice, kind: .emoji, bundleID: snapshot.app.bundleID)
     }
 
@@ -1535,8 +1537,10 @@ final class CompletionCoordinator {
             let corrected = result.corrected
             let mode = insertionMode(for: corrected, in: latest)
             enqueueInsertion { await TextInserter.insert(corrected, into: latest.app.pid, mode: mode) }
+            recorder.inserted(corrected, into: latest.id, after: latest.textBefore)
         } else {
             apply(result, in: latest)
+            recordCorrection(result, in: latest)
         }
         lastProofread = (latest.id, result)
         recordAcceptance(of: result.changes.map(\.new).joined(separator: " "), kind: .typo, bundleID: latest.app.bundleID)
@@ -1562,6 +1566,13 @@ final class CompletionCoordinator {
             await TextInserter.deleteBackward(count: proofread.deleteCount, in: pid)
             await TextInserter.insert(proofread.insertion, into: pid, mode: mode)
         }
+    }
+
+    private func recordCorrection(_ proofread: Proofread, in snapshot: FieldSnapshot) {
+        let replacement = proofread.replacement
+        recorder.inserted(
+            replacement.text, into: snapshot.id, after: String(snapshot.textBefore.dropLast(replacement.deleteCount))
+        )
     }
 
     private func insertionMode(for text: String, in snapshot: FieldSnapshot) -> InsertionMode {
