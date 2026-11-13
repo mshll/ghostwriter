@@ -111,6 +111,7 @@ final class CompletionCoordinator {
         followFeatureShortcuts()
         followPracticeField()
         followActiveApp()
+        followSuggestionSwitch()
         startMonitorsWhenTrusted()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.startMonitorsWhenTrusted() }
@@ -157,6 +158,26 @@ final class CompletionCoordinator {
         }
     }
 
+    private var isOnEverywhere: Bool {
+        SuggestionSwitch(preferences: preferences, appState: appState, appRules: services.appRules).isOnEverywhere
+    }
+
+    private func followSuggestionSwitch() {
+        let isOn = withObservationTracking {
+            isOnEverywhere
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.followSuggestionSwitch() }
+        }
+        guard monitorsStarted else { return }
+        if isOn {
+            tracker.start()
+        } else {
+            refresh?.cancel()
+            leaveField()
+            tracker.stop()
+        }
+    }
+
     private func followActiveApp() {
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -187,7 +208,7 @@ final class CompletionCoordinator {
             Self.log.error("The key monitor could not start")
             return
         }
-        tracker.start()
+        if isOnEverywhere { tracker.start() }
         Self.log.info("Completion pipeline started")
     }
 
@@ -212,6 +233,7 @@ final class CompletionCoordinator {
     private func handle(_ event: FocusEvent) {
         let signpost = Self.signposter.beginInterval("FieldEvent")
         defer { Self.signposter.endInterval("FieldEvent", signpost) }
+        guard isOnEverywhere else { return }
         switch event {
         case .focused(let snapshot), .changed(let snapshot):
             if field?.id == snapshot.id {
@@ -449,6 +471,7 @@ final class CompletionCoordinator {
 
     /// Re-reads the field after a keystroke or an accept, for apps that report text changes late or not at all.
     private func scheduleRefresh(after delay: Duration = .milliseconds(15), afterInsertion: Bool = false) {
+        guard isOnEverywhere else { return }
         refresh?.cancel()
         let pending = afterInsertion ? insertion : nil
         refresh = Task { [weak self, tracker] in
@@ -642,9 +665,8 @@ final class CompletionCoordinator {
         guard case .ready = appState.modelStatus, snapshot.selectedText.isEmpty else { return false }
         guard !appState.isPaused(bundleID: snapshot.app.bundleID) else { return false }
         let rule = rule(for: snapshot)
-        guard rule.completionsEnabled != false else { return false }
+        guard rule.completionsEnabled != false, isOnEverywhere else { return false }
         if forced { return true }
-        guard preferences.completionsEnabled else { return false }
         if isBrieflyPaused { return false }
         if InputSource.isInputMethodActive { return false }
         if power.isOnBattery, preferences.batteryOnDemandOnly { return false }
@@ -1004,7 +1026,7 @@ final class CompletionCoordinator {
         let mode: InsertionMode = text.contains(where: \.isNewline) ? .paste : rule(for: snapshot).insertionMode ?? .standard
         let pid = snapshot.app.pid
         enqueueInsertion { await TextInserter.insert(text, into: pid, mode: mode) }
-        recorder.inserted(text, into: snapshot.id)
+        recorder.inserted(text, into: snapshot.id, after: snapshot.textBefore)
         recordAcceptance(of: text, kind: kind, bundleID: snapshot.app.bundleID)
     }
 
@@ -1038,6 +1060,7 @@ final class CompletionCoordinator {
     }
 
     private func recordAcceptance(of text: String, kind: AcceptanceEvent.Kind, bundleID: String) {
+        guard isOnEverywhere else { return }
         guard countsTowardStatistics(bundleID) else {
             appState.practiceAcceptances.insert(kind)
             return
@@ -1291,7 +1314,7 @@ final class CompletionCoordinator {
 
     private func expandSnippetIfNeeded() {
         let bundleID = field?.app.bundleID ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        guard !appState.isPaused(bundleID: bundleID) else { return }
+        guard isOnEverywhere, !appState.isPaused(bundleID: bundleID) else { return }
         let engine = SnippetEngine(snippets: services.snippets.enabledSnippets)
         guard let match = engine.match(typedTail: typedTail) else { return }
         typedTail = ""
@@ -1333,13 +1356,14 @@ final class CompletionCoordinator {
             await TextInserter.insert(expansion.text, into: pid, mode: mode)
             await TextInserter.moveCaretLeft(count: expansion.cursorOffsetFromEnd, in: pid)
         }
-        recorder.inserted(expansion.text, into: snapshot.id)
+        recorder.inserted(expansion.text, into: snapshot.id, after: String(snapshot.textBefore.dropLast(match.triggerLength)))
         recordAcceptance(of: expansion.text, kind: .snippet, bundleID: snapshot.app.bundleID)
     }
 
     // MARK: Shortcuts
 
     private func forceComplete() {
+        guard isOnEverywhere else { return }
         Task { [weak self, tracker] in
             guard let snapshot = await tracker.snapshot() else { return }
             self?.startOnDemand(for: snapshot, mode: .inline)
@@ -1347,7 +1371,7 @@ final class CompletionCoordinator {
     }
 
     private func requestDraft() {
-        guard preferences.draftEnabled else { return }
+        guard preferences.draftEnabled, isOnEverywhere else { return }
         Task { [weak self, tracker] in
             guard let snapshot = await tracker.snapshot() else { return }
             self?.startOnDemand(for: snapshot, mode: .draft)
@@ -1430,7 +1454,7 @@ final class CompletionCoordinator {
             }
             await TextInserter.insert(text, into: pid, mode: mode)
         }
-        recorder.inserted(text, into: snapshot.id)
+        recorder.inserted(text, into: snapshot.id, after: snapshot.textBefore)
         recordAcceptance(of: text, kind: .action, bundleID: snapshot.app.bundleID)
     }
 
@@ -1604,7 +1628,8 @@ final class CompletionCoordinator {
     }
 
     private func mayRecord(_ snapshot: FieldSnapshot) -> Bool {
-        guard snapshot.app.bundleID != Bundle.main.bundleIdentifier, !appState.isPaused(bundleID: snapshot.app.bundleID),
+        guard snapshot.app.bundleID != Bundle.main.bundleIdentifier, isOnEverywhere,
+              !appState.isPaused(bundleID: snapshot.app.bundleID),
               preferences.recordWriting, rule(for: snapshot).recordWriting != false else { return false }
         switch snapshot.kind {
         case .search, .terminal, .code, .form: return false

@@ -241,6 +241,65 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
         晚上终于到了酒店，大家都累坏了，第二天早上我们去看了日出，风景非常美丽，回来以后每个人都晒黑了。
         """
 
+    @Test func messagesStoredTogetherComeBackAsWholeMessages() throws {
+        let messages = (0..<12).flatMap { index in
+            ["on my way, \(index) min", "grab us a table by the window", "ok see you soon!", "did you book the ferry for saturday?"]
+        } + ["bring the charger and both cables please"]
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("chat", messages.joined(separator: "\n"), app: "com.apple.MobileSMS"))
+        let found = try store.examples(query: "charger cables", bundleID: "com.apple.MobileSMS", language: nil, limit: 1, excludingKey: nil)
+        let passage = try #require(found.first)
+        #expect(passage.hasSuffix("bring the charger and both cables please"))
+        #expect(passage.split(separator: "\n").allSatisfy { messages.contains(String($0)) })
+    }
+
+    @Test func anEarlierCopyOfTheCurrentTextIsNotAnExample() throws {
+        let earlier = topics.joined(separator: " ")
+        let field = earlier + " Next week we plan to visit the lake and rent a small boat for the afternoon."
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("earlier", earlier, age: day))
+        let found = try store.examples(
+            query: String(field.suffix(600)), field: field, bundleID: "com.apple.mail", language: nil, limit: 2, excludingKey: "current"
+        )
+        #expect(found.isEmpty)
+    }
+
+    @Test func anEarlierCopyTheUserSinceEditedIsNotAnExample() throws {
+        let earlier = topics.joined(separator: " ")
+        let field = topics[0] + " The grinder broke again today. " + topics[2] + " " + topics[3] + " Our basil died."
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("earlier", earlier, age: day))
+        let found = try store.examples(
+            query: String(field.suffix(600)), field: field, bundleID: "com.apple.mail", language: nil, limit: 2, excludingKey: nil
+        )
+        #expect(found.isEmpty)
+    }
+
+    @Test func anEarlierLongerCopyOfTheCurrentTextIsNotAnExample() throws {
+        let earlier = (topics + [
+            "Later that week the bakery on the corner started selling rye bread again, which made everyone happy.",
+            "The library extended its opening hours, so I can finally return the books on my way home from work.",
+            "We repainted the hallway a pale green colour, and it took three full coats to cover the old paint.",
+        ]).joined(separator: " ")
+        let field = topics[1] + " " + topics[2]
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("earlier", earlier, age: day))
+        let found = try store.examples(
+            query: field, field: field, bundleID: "com.apple.mail", language: nil, limit: 2, excludingKey: nil
+        )
+        #expect(found.isEmpty)
+    }
+
+    @Test func writingThatSharesAPhraseWithTheCurrentTextIsAnExample() throws {
+        let field = "Quick update: we hiked up the ridge trail early, then drove back for lunch with the whole family."
+        let store = try MemoryStore.inMemory()
+        try store.upsertSession(session("hike", topics[0], age: day))
+        let found = try store.examples(
+            query: field, field: field, bundleID: "com.apple.mail", language: nil, limit: 2, excludingKey: nil
+        )
+        #expect(found == [topics[0]])
+    }
+
     @Test func textWithoutSpacesMatchesByCharacterPairs() throws {
         let store = try MemoryStore.inMemory()
         try store.upsertSession(session("budget", chineseBudget, language: "zh-Hans", age: 20 * day))

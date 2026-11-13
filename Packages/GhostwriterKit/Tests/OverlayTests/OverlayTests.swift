@@ -350,3 +350,106 @@ import Testing
         #expect(!GhostOverlay.isOnScreen(panel))
     }
 }
+
+@MainActor @Suite struct EstimatedCaretTests {
+    private let field = CGRect(x: 100, y: 300, width: 400, height: 120)
+    private let screen = CGRect(x: 0, y: 25, width: 1440, height: 850)
+
+    private func snapshot(before: String, after: String = "") -> FieldSnapshot {
+        FieldSnapshot(
+            id: FieldID(pid: 1, elementHash: 1),
+            app: AppIdentity(bundleID: "test", name: "Test", pid: 1),
+            textBefore: before,
+            textAfter: after,
+            caretRect: CGRect(x: field.minX + 4, y: field.minY + 4, width: 1, height: 16),
+            fieldFrame: field,
+            caretIsEstimated: true
+        )
+    }
+
+    @Test func exactCaretDrawsAtTheCaret() {
+        var exact = snapshot(before: "Hello there ")
+        exact.caretIsEstimated = false
+        #expect(GhostLayout.drawsAtCaret(exact))
+    }
+
+    @Test func estimatedCaretInAnEmptyFieldDrawsAtTheCaret() {
+        #expect(GhostLayout.drawsAtCaret(snapshot(before: "")))
+    }
+
+    @Test func estimatedCaretWithTextInTheFieldDoesNotDrawAtTheCaret() {
+        #expect(!GhostLayout.drawsAtCaret(snapshot(before: "Hello there ")))
+        #expect(!GhostLayout.drawsAtCaret(snapshot(before: "", after: "later text")))
+        var selected = snapshot(before: "")
+        selected.selectedText = "all of it"
+        #expect(!GhostLayout.drawsAtCaret(selected))
+    }
+
+    @Test func besideFieldSitsBelowTheFieldAtItsStart() throws {
+        let placement = try #require(GhostLayout.besideField(
+            textSize: CGSize(width: 120, height: 16), lineHeight: 16, field: field, screen: screen,
+            direction: .leftToRight, background: .white
+        ))
+        #expect(placement.frame.minX == field.minX)
+        #expect(placement.frame.minY > field.maxY)
+        #expect(!placement.frame.intersects(field))
+        #expect(placement.frame.width < field.width)
+        #expect(placement.backdrop?.rect == CGRect(origin: .zero, size: placement.frame.size))
+    }
+
+    @Test func besideFieldRightToLeftSitsAtTheFieldsRightEdge() throws {
+        let placement = try #require(GhostLayout.besideField(
+            textSize: CGSize(width: 120, height: 16), lineHeight: 16, field: field, screen: screen,
+            direction: .rightToLeft, background: .white
+        ))
+        #expect(placement.frame.maxX == field.maxX)
+    }
+
+    @Test func besideFieldGoesAboveWhenTheScreenEndsBelowTheField() throws {
+        let low = CGRect(x: 100, y: 760, width: 400, height: 110)
+        let placement = try #require(GhostLayout.besideField(
+            textSize: CGSize(width: 120, height: 16), lineHeight: 16, field: low, screen: screen,
+            direction: .leftToRight, background: .white
+        ))
+        #expect(placement.frame.maxY < low.minY)
+    }
+
+    @Test func besideFieldIsNeverWiderThanTheField() throws {
+        let placement = try #require(GhostLayout.besideField(
+            textSize: CGSize(width: 2_000, height: 16), lineHeight: 16, field: field, screen: screen,
+            direction: .leftToRight, background: .white
+        ))
+        #expect(placement.frame.width == field.width)
+    }
+
+    @Test func besideFieldClipsTallTextToTheRoomOnScreen() throws {
+        let placement = try #require(GhostLayout.besideField(
+            textSize: CGSize(width: 380, height: 2_000), lineHeight: 16, field: field, screen: screen,
+            direction: .leftToRight, background: .white
+        ))
+        #expect(placement.frame.maxY <= screen.maxY)
+        #expect(!placement.frame.intersects(field))
+    }
+
+    @Test func besideFieldNeedsRoomForOneLine() {
+        let filling = screen.insetBy(dx: 0, dy: 8)
+        #expect(GhostLayout.besideField(
+            textSize: CGSize(width: 120, height: 16), lineHeight: 16, field: filling, screen: screen,
+            direction: .leftToRight, background: .white
+        ) == nil)
+    }
+
+    @Test func overlayDrawsOutsideTheFieldAtAnEstimatedCaret() throws {
+        let overlay = GhostOverlay()
+        #expect(overlay.show(" world", for: snapshot(before: "Hello there")))
+        defer { overlay.hide() }
+        let panel = try #require(overlay.ghostView.window)
+        let primaryHeight = try #require(NSScreen.screens.first?.frame.height)
+        #expect(!panel.frame.flippedVertically(primaryScreenHeight: primaryHeight).intersects(field))
+    }
+
+    @Test func typoMarkIsNotDrawnAtAnEstimatedCaret() {
+        let overlay = GhostOverlay()
+        #expect(!overlay.showTypoFix(word: "teh", closing: " ", correction: "the", for: snapshot(before: "Hello teh ")))
+    }
+}

@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.statusItemFrame = { [weak statusItem] in statusItem?.buttonScreenFrame }
         listenForToggleShortcut()
         startCompletionPipeline()
+        services.models.resumeInterruptedDownloads()
 
         if !preferences.hasCompletedOnboarding {
             windows.showOnboarding(OnboardingStep.from(preferences.onboardingStep ?? .welcome))

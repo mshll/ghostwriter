@@ -44,6 +44,71 @@ import Testing
     }
 }
 
+@Suite struct PaymentFieldHintsTests {
+    @Test func cardLabelsInEachLanguage() {
+        let labels = [
+            "Card number", "Credit card", "Debit card number", "CVV", "CVC", "CSC", "CVV2", "Security code",
+            "Expiration date", "Expiry date", "MM / YY", "MM/YYYY",
+            "رقم البطاقة", "بطاقة الائتمان", "رمز الأمان", "تاريخ الانتهاء",
+            "Numéro de carte", "Carte bancaire", "Carte de crédit", "Cryptogramme visuel", "Date d’expiration", "MM/AA",
+            "Kartennummer", "Kreditkarte", "Prüfnummer", "Sicherheitscode", "Ablaufdatum", "Gültig bis", "MM/JJ",
+            "Número de tarjeta", "Tarjeta de crédito", "Código de seguridad", "Fecha de vencimiento",
+            "Fecha de caducidad",
+        ]
+        for label in labels {
+            #expect(SecretFieldHints.namesPaymentOrOneTimeCode(label), "\(label)")
+        }
+    }
+
+    @Test func oneTimeCodeLabelsInEachLanguage() {
+        let labels = [
+            "One-time code", "One time passcode", "Verification code", "Enter the OTP", "2FA code",
+            "Authentication code", "رمز التحقق", "رمز لمرة واحدة", "Code de vérification", "Code à usage unique",
+            "Bestätigungscode", "Einmalcode", "Código de verificación",
+        ]
+        for label in labels {
+            #expect(SecretFieldHints.namesPaymentOrOneTimeCode(label), "\(label)")
+        }
+    }
+
+    @Test func cardNumberPlaceholder() {
+        #expect(SecretFieldHints.namesPaymentOrOneTimeCode("1234 1234 1234 1234"))
+        #expect(SecretFieldHints.namesPaymentOrOneTimeCode("0000-0000-0000-0000"))
+        #expect(!SecretFieldHints.namesPaymentOrOneTimeCode("2024"))
+        #expect(!SecretFieldHints.namesPaymentOrOneTimeCode("+1 555 0100"))
+    }
+
+    @Test func webIdentifiers() {
+        let identifiers = [
+            "cc-number", "ccNumber", "card_number", "cardnumber", "cc-csc", "cvc", "card-cvv", "cc-exp",
+            "expiry-date", "one-time-code", "otpInput", "securityCode", "checkout_card_number_field",
+        ]
+        for identifier in identifiers {
+            #expect(SecretFieldHints.namesPaymentOrOneTimeCode(identifier), "\(identifier)")
+        }
+    }
+
+    @Test func ordinaryFieldsAreNotPayment() {
+        let names = [
+            "Message", "Code", "Source code", "Card title", "Add a card", "Gift card message", "Postal code",
+            "Promo code", "Country code", "footprint", "hotpot", "discard-number", "successExpected",
+            "Expires in", "Expiration reminder", "Subject", "Message #cards", "editor", "monaco-editor",
+            "Comment", "Phone number", "", "رسالة", "Nachricht", "Carte du restaurant",
+        ]
+        for name in names {
+            #expect(!SecretFieldHints.namesPaymentOrOneTimeCode(name), "\(name)")
+        }
+    }
+
+    @Test func cardAutofill() {
+        #expect(SecretFieldHints.isPaymentAutofill("credit card"))
+        for other in ["credentials", "contacts", "strong password", "loading", "none"] {
+            #expect(!SecretFieldHints.isPaymentAutofill(other), "\(other)")
+        }
+        #expect(!SecretFieldHints.isPaymentAutofill(nil))
+    }
+}
+
 @Suite struct FieldSizeTests {
     private let chatInput = CGRect(x: 64, y: 810, width: 248, height: 20)
 
@@ -210,24 +275,37 @@ import Testing
 
     @Test func lineBoxBecomesCaretAtLineStart() {
         let box = CGRect(x: 412, y: 881, width: 702, height: 23)
-        #expect(CaretLocator.emptyLineCaret(box, in: field, rightToLeft: false) == CGRect(x: 412, y: 881, width: 1, height: 23))
+        #expect(CaretLocator.emptyLineCaret(box, in: field, style: FieldStyle(), rightToLeft: false) == CGRect(x: 412, y: 881, width: 1, height: 23))
     }
 
     @Test func rightToLeftCaretSitsAtLineEnd() {
         let box = CGRect(x: 412, y: 881, width: 702, height: 23)
-        #expect(CaretLocator.emptyLineCaret(box, in: field, rightToLeft: true) == CGRect(x: 1114, y: 881, width: 1, height: 23))
+        #expect(CaretLocator.emptyLineCaret(box, in: field, style: FieldStyle(), rightToLeft: true) == CGRect(x: 1114, y: 881, width: 1, height: 23))
     }
 
     @Test func boxOutsideTheFieldIsRejected() {
         let window = CGRect(x: 30, y: 55, width: 1425, height: 939)
-        #expect(CaretLocator.emptyLineCaret(window, in: field, rightToLeft: false) == nil)
+        #expect(CaretLocator.emptyLineCaret(window, in: field, style: FieldStyle(), rightToLeft: false) == nil)
     }
 
     @Test func unknownFieldIsRejected() {
-        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 702, height: 23), in: nil, rightToLeft: false) == nil)
+        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 702, height: 23), in: nil, style: FieldStyle(), rightToLeft: false) == nil)
+    }
+
+    @Test func editableBoxTallerThanTwoLinesIsRejected() {
+        let editable = CGRect(x: 114, y: 586, width: 502, height: 122)
+        #expect(CaretLocator.emptyLineCaret(editable, in: editable, style: FieldStyle(fontSize: 16), rightToLeft: false) == nil)
+    }
+
+    @Test func oneLineEditableBoxIsTheCaretLine() {
+        let editable = CGRect(x: 114, y: 586, width: 502, height: 24)
+        #expect(
+            CaretLocator.emptyLineCaret(editable, in: editable, style: FieldStyle(fontSize: 16), rightToLeft: false)
+                == CGRect(x: 114, y: 586, width: 1, height: 24)
+        )
     }
 
     @Test func narrowRectIsLeftToTheCaretChecks() {
-        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 0, height: 17), in: field, rightToLeft: false) == nil)
+        #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 0, height: 17), in: field, style: FieldStyle(), rightToLeft: false) == nil)
     }
 }

@@ -20,9 +20,11 @@ flowchart LR
 
 ### 1. Capture
 
-`FocusTracker` follows the focused text field through Accessibility. `FieldReader` reads the text before and after the caret, the caret's position and the field's font. `FieldClassifier` decides what kind of field it is (email, chat, document, search, code, form and others) from its role, its labels and the app. Secure fields, fields that look like they hold a password, and password managers are never read.
+`FocusTracker` follows the focused text field through Accessibility. `FieldReader` reads the text before and after the caret, the caret's position and the field's font. `FieldClassifier` decides what kind of field it is (email, chat, document, search, code, form and others) from its role, its labels and the app. Secure fields, fields that look like they hold a password, a payment card number, security code or expiry date, or a one-time code, and password managers are never read. These are recognized from the field's labels, placeholder and identifiers, never from its text.
 
 Suggestions start automatically only once the text before the caret holds a space or a line break, so a single word (an email address, a username, a name) gets none. Scripts written without spaces, such as Chinese, Japanese and Thai, are exempt. Suggest now still works on a single word.
+
+While suggestions are off everywhere (from the menu bar or the shortcut), `FocusTracker` stops: no field is read and nothing is recorded, except a field read for a proofread or selection action shortcut. The model is unloaded to free its memory. Turning suggestions on loads it again, so the first suggestion after that comes late: Gemma 4 E2B took 1.2 to 1.4 s to load in repeated runs and 6.7 s in the first run. Pausing one app keeps the tracker running.
 
 Some apps report their text in unusual ways. `BuiltInAppRules` holds adjustments for known apps. Users can add their own in Settings > Apps.
 
@@ -30,7 +32,7 @@ Some apps report their text in unusual ways. `BuiltInAppRules` holds adjustments
 
 Besides the text in the field, the prompt can contain:
 
-- **Your writing.** `Memory` stores what you write in fields where Ghostwriter suggests, in a SQLite database on the Mac: the lines you changed, up to 8,000 characters, without the text Ghostwriter inserted or quoted lines that start with `>`. A field you only read, or where you typed fewer than 20 characters, is not stored. For each request it finds passages of earlier writing that share distinctive words with what you type, with full-text search, and prefers the same app and recent text. These passages are examples of your style.
+- **Your writing.** `Memory` stores what you write in fields where Ghostwriter suggests, in a SQLite database on the Mac: the lines you changed, up to 8,000 characters, without the text Ghostwriter inserted or quoted lines that start with `>`. When an inserted word appears more than once and the text before it does not show which one Ghostwriter inserted, that save is skipped. When a field empties, as a chat field does when you send, the message is kept, and the messages you send from one field are stored together, newest last, up to the same 8,000 characters. A field you only read, or where you typed fewer than 20 characters, is not stored. For each request it finds passages of earlier writing that share distinctive words with what you type, with full-text search, and prefers the same app and recent text. It leaves out earlier writing that mostly repeats the text in the field, such as a copy of the document you are editing saved before Ghostwriter restarted. These passages are examples of your style.
 - **Window text.** `ScreenContext` reads the visible text near the caret through Accessibility and keeps the paragraphs nearest the caret. They go in the prompt top to bottom, so the paragraph just above the caret comes last: for example, the message you reply to. When an app hides its text, it can recognize the text in a screenshot of the window (with Screen Recording permission).
 - **Clipboard.** Text you copied in the last few minutes. Concealed items, such as passwords, are skipped.
 - **Instructions.** What you wrote about yourself in Settings > Personalization, and instructions for the current app.
@@ -77,7 +79,7 @@ When the text before the caret is longer than its budget (350 tokens), its start
 
 ### 5. Display and accept
 
-`Overlay` draws the suggestion in a transparent panel at the caret, in the field's font, with right-to-left support. In the middle of a line it samples the field's background so the ghost text covers the text after the caret cleanly.
+`Overlay` draws the suggestion in a transparent panel at the caret, in the field's font, with right-to-left support. In the middle of a line it samples the field's background so the ghost text covers the text after the caret cleanly. When the app does not tell where the caret is and the field holds text, the suggestion shows just below the field (or above it, at the bottom of the screen), so it never covers what you wrote.
 
 `Input` watches the accept keys. Tab and the key above Tab act only while a suggestion shows. `TextInserter` types the accepted text with key events, or pastes it in apps that need that. Every event that Ghostwriter posts carries the `EventMarker` tag, and Ghostwriter ignores events with that tag, so it never reacts to its own typing.
 

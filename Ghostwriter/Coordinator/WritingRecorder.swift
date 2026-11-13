@@ -19,7 +19,7 @@ final class WritingRecorder {
     private var keys: [FieldID: String] = [:]
     private var writing: [FieldID: (state: FieldWriting, used: Date)] = [:]
     private var latest: FieldSnapshot?
-    private var savedText = ""
+    private var saved: (text: String, sends: Int)?
     private var lastSave = Date.distantPast
     private var saving: Task<Void, Never>?
 
@@ -42,8 +42,13 @@ final class WritingRecorder {
     }
 
     func update(_ snapshot: FieldSnapshot) {
-        guard latest?.id == snapshot.id else { return }
+        guard let previous = latest, previous.id == snapshot.id else { return }
         latest = snapshot
+        if Self.isBlank(snapshot), !Self.isBlank(previous) {
+            writing[snapshot.id]?.state.emptied(
+                from: Self.text(of: previous), to: Self.text(of: snapshot), keepsMessage: isAllowed(previous)
+            )
+        }
         if Date.now.timeIntervalSince(lastSave) > Self.saveInterval {
             save()
         }
@@ -54,8 +59,8 @@ final class WritingRecorder {
         writing[id]?.state.typed(count)
     }
 
-    func inserted(_ text: String, into field: FieldID) {
-        writing[field]?.state.inserted(text)
+    func inserted(_ text: String, into field: FieldID, after textBefore: String) {
+        writing[field]?.state.inserted(text, after: textBefore)
     }
 
     func finish() {
@@ -76,8 +81,8 @@ final class WritingRecorder {
         lastSave = .now
         guard let memory, let snapshot = latest, isAllowed(snapshot), let state = writing[snapshot.id]?.state else { return }
         let text = Self.text(of: snapshot)
-        guard text != savedText else { return }
-        savedText = text
+        guard saved?.text != text || saved?.sends != state.sends else { return }
+        saved = (text, state.sends)
         let key = key
         let sampleLength = Self.languageSampleLength
         let previous = saving
@@ -98,6 +103,11 @@ final class WritingRecorder {
                 Self.log.error("Saving a writing session failed: \(error.localizedDescription, privacy: .public)")
             }
         }
+    }
+
+    private static func isBlank(_ snapshot: FieldSnapshot) -> Bool {
+        FieldWriting.isBlank(snapshot.textBefore) && FieldWriting.isBlank(snapshot.selectedText)
+            && FieldWriting.isBlank(snapshot.textAfter)
     }
 
     private static func text(of snapshot: FieldSnapshot) -> String {

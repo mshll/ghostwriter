@@ -41,8 +41,9 @@ struct Personalization {
     func examples(for row: Row) throws -> [String] {
         let query = String(row.before.suffix(Self.queryCharacters))
         return try memory.examples(
-            query: query, bundleID: row.bundle ?? "", language: LanguageDetector.dominantLanguage(of: query),
-            limit: exampleLimit, excludingKey: nil, now: row.date ?? .now, ranking: ranking
+            query: query, field: MemoryStore.fieldText(before: row.before, after: row.after ?? ""), bundleID: row.bundle ?? "",
+            language: LanguageDetector.dominantLanguage(of: query), limit: exampleLimit, excludingKey: nil,
+            now: row.date ?? .now, ranking: ranking
         )
     }
 

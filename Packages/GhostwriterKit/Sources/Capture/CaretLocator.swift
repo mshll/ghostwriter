@@ -54,7 +54,8 @@ enum CaretLocator {
             caretMarker = selectionEnd
         }
         let rightToLeft = (before.flatMap(FieldClassifier.direction(of:)) ?? direction) == .rightToLeft
-        if let caretMarker, let caret = try markerCaret(element, at: caretMarker, frame: frame, rightToLeft: rightToLeft) {
+        if let caretMarker,
+           let caret = try markerCaret(element, at: caretMarker, frame: frame, style: style, rightToLeft: rightToLeft) {
             return caret
         }
         return estimate(frame, style: style, rightToLeft: direction == .rightToLeft)
@@ -96,13 +97,13 @@ enum CaretLocator {
     }
 
     private static func markerCaret(
-        _ element: AXElement, at marker: AXTextMarker, frame: CGRect?, rightToLeft: Bool
+        _ element: AXElement, at marker: AXTextMarker, frame: CGRect?, style: FieldStyle, rightToLeft: Bool
     ) throws(AXFailure) -> Caret? {
         if let rect = try markerBounds(element, from: marker, to: marker) {
             if isSane(rect, in: frame) {
                 return Caret(rect: line(at: rect.minX, rect), source: .textMarker)
             }
-            if let caret = emptyLineCaret(rect, in: frame, rightToLeft: rightToLeft) {
+            if let caret = emptyLineCaret(rect, in: frame, style: style, rightToLeft: rightToLeft) {
                 return Caret(rect: caret, source: .textMarker)
             }
         }
@@ -114,20 +115,25 @@ enum CaretLocator {
         return Caret(rect: line(at: rightToLeft ? rect.minX : rect.maxX, rect), source: .textMarker)
     }
 
-    /// Chromium answers a collapsed range on an empty line with that line's box, which spans the field's width.
-    static func emptyLineCaret(_ rect: CGRect, in frame: CGRect?, rightToLeft: Bool) -> CGRect? {
-        guard let frame, rect.minX.isFinite, rect.minY.isFinite, rect.height > 0, rect.width > FieldReader.maxCaretWidth,
-              frame.insetBy(dx: -1, dy: -1).contains(rect)
+    /// Chromium answers a collapsed range on an empty line with that line's box, which spans the field's width. On an
+    /// empty line between two `<br>` in a contenteditable it answers with the whole editable box, which is no line.
+    static func emptyLineCaret(_ rect: CGRect, in frame: CGRect?, style: FieldStyle, rightToLeft: Bool) -> CGRect? {
+        guard let frame, rect.minX.isFinite, rect.minY.isFinite, rect.height > 0, rect.height <= 2 * lineHeight(style),
+              rect.width > FieldReader.maxCaretWidth, frame.insetBy(dx: -1, dy: -1).contains(rect)
         else { return nil }
         return line(at: rightToLeft ? rect.maxX : rect.minX, rect)
     }
 
     private static func estimate(_ frame: CGRect?, style: FieldStyle, rightToLeft: Bool) -> Caret {
         guard let frame else { return Caret(rect: .zero, source: .none) }
-        let lineHeight = min(frame.height, max(12, (style.fontSize ?? 13) * 1.25))
+        let lineHeight = min(frame.height, lineHeight(style))
         let y = frame.height <= lineHeight * 2 ? frame.midY - lineHeight / 2 : frame.minY + 4
         let x = rightToLeft ? frame.maxX - 5 : frame.minX + 4
         return Caret(rect: CGRect(x: x, y: y, width: 1, height: lineHeight), source: .estimate)
+    }
+
+    private static func lineHeight(_ style: FieldStyle) -> CGFloat {
+        max(12, (style.fontSize ?? 13) * 1.25)
     }
 
     private static func line(at x: CGFloat, _ rect: CGRect) -> CGRect {

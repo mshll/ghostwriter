@@ -323,6 +323,41 @@ enum GhostLayout {
             textClip: CGRect(x: 0, y: 0, width: width, height: bottom - top)
         )
     }
+
+    static let besideFieldGap: CGFloat = 4
+    static let besideFieldPadding = CGSize(width: 6, height: 3)
+
+    /// An estimated caret sits at the field's first line: there it would cover text unless the field is empty.
+    static func drawsAtCaret(_ snapshot: FieldSnapshot) -> Bool {
+        !snapshot.caretIsEstimated
+            || (snapshot.textBefore.isEmpty && snapshot.textAfter.isEmpty && snapshot.selectedText.isEmpty)
+    }
+
+    /// Below the field at its starting edge, or above it when the screen ends first; clipped to the side with more
+    /// room when neither holds the whole text.
+    static func besideField(
+        textSize: CGSize, lineHeight: CGFloat, field: CGRect, screen: CGRect, direction: WritingDirection,
+        background: NSColor
+    ) -> GhostPlacement? {
+        let padding = besideFieldPadding
+        let width = min((textSize.width + 2 * padding.width).rounded(.up), field.width, screen.width)
+        let roomBelow = screen.maxY - field.maxY - besideFieldGap
+        let roomAbove = field.minY - besideFieldGap - screen.minY
+        let height = min((textSize.height + 2 * padding.height).rounded(.up), max(roomBelow, roomAbove))
+        guard width > 2 * padding.width, height >= lineHeight + 2 * padding.height else { return nil }
+        let fitsBelow = height <= roomBelow
+        let y = fitsBelow ? field.maxY + besideFieldGap : field.minY - besideFieldGap - height
+        let start = direction == .leftToRight ? field.minX : field.maxX - width
+        let x = min(max(start, screen.minX), screen.maxX - width)
+        let bounds = CGRect(x: 0, y: 0, width: width, height: height)
+        let inner = bounds.insetBy(dx: padding.width, dy: padding.height)
+        return GhostPlacement(
+            frame: CGRect(x: x, y: y, width: width, height: height),
+            textRect: CGRect(x: inner.minX, y: inner.minY, width: inner.width, height: unbounded),
+            textClip: inner,
+            backdrop: GhostBackdrop(rect: bounds, color: background)
+        )
+    }
 }
 
 enum PickerLayout {

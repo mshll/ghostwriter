@@ -30,10 +30,18 @@ public actor ModelDownloader {
         let job = DownloadJob(resumeFile: folder.appending(path: spec.fileName + ".resume"))
         jobs[spec.id] = job
         defer { if jobs[spec.id] === job { jobs[spec.id] = nil } }
-        return try await withTaskCancellationHandler {
-            try await perform(spec, from: remote, job: job, progress: progress)
-        } onCancel: {
-            job.cancel()
+        do {
+            return try await withTaskCancellationHandler {
+                try await perform(spec, from: remote, job: job, progress: progress)
+            } onCancel: {
+                job.cancel()
+            }
+        } catch {
+            if job.isDiscarded {
+                removeIfPresent(job.resumeFile)
+                removeIfPresent(folder.appending(path: spec.fileName + ".download"))
+            }
+            throw error
         }
     }
 
@@ -53,7 +61,7 @@ public actor ModelDownloader {
             log.notice("Linked \(spec.fileName, privacy: .public) to a copy already on this Mac")
             return destination
         }
-        // A complete staging file is left behind when a cancel lands during the checksum; verify it again instead.
+        // A complete staging file is left behind when the app quits during the checksum; verify it again instead.
         if !Self.hasSize(spec.sizeBytes, staging) {
             try Self.checkSpace(needed: spec.sizeBytes + Self.spaceMargin, available: availableSpace())
             try await transfer(from: remote, to: staging, spec: spec, job: job, progress: progress)
@@ -94,6 +102,16 @@ public actor ModelDownloader {
         return !FileManager.default.fileExists(atPath: url.path)
     }
 
+    /// Downloads stopped by a quit or a failure, not by `cancel`.
+    public func interrupted(among specs: [ModelSpec]) -> [ModelSpec] {
+        specs.filter { spec in
+            guard spec.downloadURL != nil,
+                  !FileManager.default.fileExists(atPath: folder.appending(path: spec.fileName).path)
+            else { return false }
+            return [".resume", ".download"].contains { FileManager.default.fileExists(atPath: folder.appending(path: spec.fileName + $0).path) }
+        }
+    }
+
     public func cancel(_ spec: ModelSpec) {
         jobs[spec.id]?.cancel()
     }
@@ -116,7 +134,7 @@ public actor ModelDownloader {
             } catch {
                 let fresh = (error as? URLError)?.downloadTaskResumeData
                 if job.isCancelled || Task.isCancelled || (error as? URLError)?.code == .cancelled {
-                    if let fresh { Self.store(fresh, at: job.resumeFile) }
+                    if let fresh, !job.isDiscarded { Self.store(fresh, at: job.resumeFile) }
                     throw CancellationError()
                 }
                 if let fresh {
@@ -214,15 +232,18 @@ public actor ModelDownloader {
 }
 
 private final class DownloadJob: Sendable {
+    private enum Stop { case cancel, suspend }
+
     let resumeFile: URL
-    private let cancelled = Atomic<Bool>(false)
+    private let stop = Mutex<Stop?>(nil)
     private let current = Mutex<URLSessionDownloadTask?>(nil)
 
     init(resumeFile: URL) {
         self.resumeFile = resumeFile
     }
 
-    var isCancelled: Bool { cancelled.load(ordering: .relaxed) }
+    var isCancelled: Bool { stop.withLock { $0 } != nil }
+    var isDiscarded: Bool { stop.withLock { $0 } == .cancel }
 
     func checkCancellation() throws {
         if isCancelled || Task.isCancelled { throw CancellationError() }
@@ -239,15 +260,16 @@ private final class DownloadJob: Sendable {
     }
 
     func cancel() {
-        cancelled.store(true, ordering: .relaxed)
-        let resumeFile = resumeFile
-        current.withLock { $0 }?.cancel(byProducingResumeData: { data in
-            if let data { ModelDownloader.store(data, at: resumeFile) }
-        })
+        stop.withLock { $0 = .cancel }
+        current.withLock { $0 }?.cancel()
     }
 
     func suspend() async {
-        cancelled.store(true, ordering: .relaxed)
+        guard stop.withLock({ stopped in
+            guard stopped == nil else { return false }
+            stopped = .suspend
+            return true
+        }) else { return }
         guard let task = current.withLock({ $0 }) else { return }
         let resumeFile = resumeFile
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

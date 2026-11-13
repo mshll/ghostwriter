@@ -439,6 +439,7 @@ struct PracticeStep: View {
         case .downloading(let progress):
             return "Suggestions start when the model is downloaded (\(progress.formatted(.percent.precision(.fractionLength(0)))))."
         case .loading: return "The model is loading."
+        case .unloadedWhileOff: return "Suggestions are off everywhere."
         case .notInstalled: return "Download a model to see suggestions."
         case .failed(let message): return "The model failed to load: \(message)"
         }

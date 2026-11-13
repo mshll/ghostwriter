@@ -109,6 +109,12 @@ final class ModelLibrary {
         }
     }
 
+    func resumeInterruptedDownloads() {
+        Task { [downloader, models] in
+            for spec in await downloader.interrupted(among: models) { download(spec) }
+        }
+    }
+
     func cancelDownload(_ spec: ModelSpec) {
         downloadTasks[spec.id]?.cancel()
         endDownload(spec.id)
