@@ -27,9 +27,14 @@ public enum SpellCheck {
         text.last.map { sentenceEnds.contains($0) && !$0.isNewline } ?? false
     }
 
+    /// Whether a space or punctuation ends `textBefore`: only then can `lastWord` or `sentence` find a misspelling.
+    public static func finishesWord(_ textBefore: String) -> Bool {
+        textBefore.last.map { $0.isWhitespace || $0.isPunctuation } ?? false
+    }
+
     /// The word that a space or punctuation has just finished.
     public static func lastWord(in textBefore: String, language: String?) -> Misspelling? {
-        guard let last = textBefore.last, last.isWhitespace || last.isPunctuation else { return nil }
+        guard finishesWord(textBefore) else { return nil }
         guard let token = tokens(in: Array(textBefore)).last, token.end == textBefore.count - 1 else { return nil }
         return check(token, in: Array(textBefore), language: language)
     }

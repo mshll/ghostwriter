@@ -1059,7 +1059,7 @@ final class CompletionCoordinator {
         let rule = rule(for: snapshot)
         guard rule.typoFixesEnabled != false, (rule.typoFixesEnabled ?? preferences.typoFixesEnabled) || preferences.suppressOnTypo,
               snapshot.selectedText.isEmpty, snapshot.kind != .code, snapshot.kind != .terminal,
-              !InputSource.isInputMethodActive else { return false }
+              SpellCheck.finishesWord(snapshot.textBefore), !InputSource.isInputMethodActive else { return false }
         let language = LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(400)))
         let found = preferences.sentenceTypoCheck && SpellCheck.endsSentence(snapshot.textBefore)
             ? SpellCheck.sentence(endingAt: snapshot.textBefore, language: language)
@@ -1068,11 +1068,11 @@ final class CompletionCoordinator {
         let candidates = found.filter { !ignored.contains($0.word.lowercased()) }.suffix(Self.maxSentenceTypos)
         guard !candidates.isEmpty else { return false }
         typoCheck?.cancel()
-        typoCheck = Task { [weak self] in await self?.judge(Array(candidates), in: snapshot) }
+        typoCheck = Task { [weak self] in await self?.judge(Array(candidates), in: snapshot, language: language) }
         return true
     }
 
-    private func judge(_ found: [Misspelling], in snapshot: FieldSnapshot) async {
+    private func judge(_ found: [Misspelling], in snapshot: FieldSnapshot, language: String?) async {
         var fixes: [TypoFix] = []
         var automatic = true
         for (index, misspelling) in found.enumerated() {
@@ -1096,7 +1096,7 @@ final class CompletionCoordinator {
             return
         }
         if preferences.autoFixTypos, automatic, fixes.count == 1, let fix = fixes.first, fix.endsText(snapshot.textBefore),
-           Self.autoFixLanguages.contains(LanguageDetector.dominantLanguage(of: String(snapshot.textBefore.suffix(400))) ?? "") {
+           Self.autoFixLanguages.contains(language ?? "") {
             autoFix(fix, in: snapshot)
             return
         }

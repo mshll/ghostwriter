@@ -2,6 +2,20 @@ import Testing
 @testable import Proofing
 
 @MainActor @Suite struct LastWordChecks {
+    @Test func finishesAWordOnlyAtSpaceOrPunctuation() {
+        #expect(SpellCheck.finishesWord("see you tomorow "))
+        #expect(SpellCheck.finishesWord("see you,"))
+        #expect(!SpellCheck.finishesWord("see you tomorow"))
+        #expect(!SpellCheck.finishesWord(""))
+    }
+
+    @Test func everySentenceEndFinishesAWord() {
+        for end in SpellCheck.sentenceEnds {
+            let text = "Done tomorow" + String(end)
+            #expect(!SpellCheck.endsSentence(text) || SpellCheck.finishesWord(text), "\(end)")
+        }
+    }
+
     @Test func flagsAFinishedMisspelledWord() throws {
         let typo = try #require(SpellCheck.lastWord(in: "see you tomorow ", language: "en"))
         #expect(typo.word == "tomorow")
