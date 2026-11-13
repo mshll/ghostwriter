@@ -5,6 +5,12 @@ import Prompting
 import os
 
 final class WritingRecorder {
+    private struct Field {
+        var state: FieldWriting
+        var used: Date
+        let bundleID: String
+    }
+
     nonisolated private static let log = Logger.gw("WritingRecorder")
     private static let saveInterval: TimeInterval = 30
     private static let languageSampleLength = 2_000
@@ -17,14 +23,16 @@ final class WritingRecorder {
     /// One session per field for the app's lifetime, so returning to a field continues its session
     /// instead of storing a near-copy that would come back as an example of itself.
     private var keys: [FieldID: String] = [:]
-    private var writing: [FieldID: (state: FieldWriting, used: Date)] = [:]
+    private var writing: [FieldID: Field] = [:]
     private var latest: FieldSnapshot?
     private var saved: (text: String, sends: Int)?
     private var lastSave = Date.distantPast
     private var saving: Task<Void, Never>?
+    private var erasures: Int
 
     init(memory: MemoryStore?) {
         self.memory = memory
+        erasures = memory?.erasureCount ?? 0
     }
 
     func begin(_ snapshot: FieldSnapshot) {
@@ -32,7 +40,7 @@ final class WritingRecorder {
         key = keys[snapshot.id] ?? UUID().uuidString
         keys[snapshot.id] = key
         if writing[snapshot.id] == nil {
-            writing[snapshot.id] = (FieldWriting(baseline: Self.text(of: snapshot)), .now)
+            writing[snapshot.id] = Field(state: FieldWriting(baseline: Self.text(of: snapshot)), used: .now, bundleID: snapshot.app.bundleID)
             forgetOldestField()
         } else {
             writing[snapshot.id]?.state.refocused()
@@ -43,6 +51,7 @@ final class WritingRecorder {
 
     func update(_ snapshot: FieldSnapshot) {
         guard let previous = latest, previous.id == snapshot.id else { return }
+        forgetErasedWriting()
         latest = snapshot
         if Self.isBlank(snapshot), !Self.isBlank(previous) {
             writing[snapshot.id]?.state.emptied(
@@ -71,6 +80,24 @@ final class WritingRecorder {
         latest = nil
     }
 
+    /// Forgets fields whose writing was erased. The current field starts again from its text at that point,
+    /// so only what is written after the erase is saved.
+    private func forgetErasedWriting() {
+        guard let memory else { return }
+        let count = memory.erasureCount
+        guard count != erasures else { return }
+        for (id, field) in writing where memory.wasErased(field.bundleID, since: erasures) {
+            writing[id] = nil
+            keys[id] = nil
+        }
+        erasures = count
+        guard let latest, writing[latest.id] == nil else { return }
+        key = UUID().uuidString
+        keys[latest.id] = key
+        writing[latest.id] = Field(state: FieldWriting(baseline: Self.text(of: latest)), used: .now, bundleID: latest.app.bundleID)
+        saved = nil
+    }
+
     private func forgetOldestField() {
         guard writing.count > Self.trackedFields,
               let oldest = writing.min(by: { $0.value.used < $1.value.used })?.key else { return }
@@ -79,11 +106,13 @@ final class WritingRecorder {
 
     private func save() {
         lastSave = .now
+        forgetErasedWriting()
         guard let memory, let snapshot = latest, isAllowed(snapshot), let state = writing[snapshot.id]?.state else { return }
         let text = Self.text(of: snapshot)
         guard saved?.text != text || saved?.sends != state.sends else { return }
         saved = (text, state.sends)
         let key = key
+        let erasures = erasures
         let sampleLength = Self.languageSampleLength
         let previous = saving
         saving = Task.detached {
@@ -98,7 +127,7 @@ final class WritingRecorder {
                 language: LanguageDetector.dominantLanguage(of: String(excerpt.suffix(sampleLength)))
             )
             do {
-                try memory.upsertSession(session)
+                try memory.upsertSession(session, unlessErasedSince: erasures)
             } catch {
                 Self.log.error("Saving a writing session failed: \(error.localizedDescription, privacy: .public)")
             }

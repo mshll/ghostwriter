@@ -16,10 +16,16 @@ public final class MemoryStore: Sendable {
         var lastPurge = Date.distantPast
         var writingGeneration = 0
         var followers: [FollowersKey: [String: [String: Double]]] = [:]
+        /// The app of each erase, nil for all apps.
+        var erasures: [String?] = []
 
         mutating func writingChanged() {
             writingGeneration += 1
             followers = [:]
+        }
+
+        func wasErased(_ bundleID: String, since count: Int) -> Bool {
+            erasures.dropFirst(count).contains { $0 == nil || $0 == bundleID }
         }
     }
 
@@ -63,8 +69,17 @@ public final class MemoryStore: Sendable {
         return configuration
     }
 
-    public func upsertSession(_ session: WritingSession) throws {
-        try writer.write { db in
+    /// How many erases ran. Writing captured while it was `count` is dropped by an erase after that.
+    public var erasureCount: Int { state.withLock { $0.erasures.count } }
+
+    public func wasErased(_ bundleID: String, since count: Int) -> Bool {
+        state.withLock { $0.wasErased(bundleID, since: count) }
+    }
+
+    /// Skips `session` when its app's writing was erased after `erasureCount` was `count`.
+    public func upsertSession(_ session: WritingSession, unlessErasedSince count: Int? = nil) throws {
+        let saved = try writer.write { db in
+            if let count, state.withLock({ $0.wasErased(session.bundleID, since: count) }) { return false }
             try db.execute(
                 sql: """
                     INSERT INTO writing_sessions
@@ -80,6 +95,11 @@ public final class MemoryStore: Sendable {
                     Words.indexedBigrams(in: session.text), session.language, session.updatedAt, session.updatedAt,
                 ]
             )
+            return true
+        }
+        guard saved else {
+            Self.log.info("Skipped saving writing that was erased")
+            return
         }
         let now = Date.now
         let purgeDue = state.withLock { state in
@@ -145,6 +165,7 @@ public final class MemoryStore: Sendable {
             }
             let removed = db.changesCount
             try db.execute(sql: "INSERT INTO writing_sessions_ft(writing_sessions_ft) VALUES('rebuild')")
+            state.withLock { $0.erasures.append(bundleID) }
             return removed
         }
         state.withLock { $0.writingChanged() }
