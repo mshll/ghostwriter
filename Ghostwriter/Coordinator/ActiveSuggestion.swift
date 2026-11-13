@@ -23,12 +23,7 @@ struct ActiveSuggestion: Equatable {
         if case .typos = kind {
             return textBefore == anchor ? self : nil
         }
-        guard let appended = TextContinuation.appended(
-            from: ShownSuggestion.normalized(anchor), to: ShownSuggestion.normalized(textBefore)
-        ) else {
-            return nil
-        }
-        let typed = String(appended)
+        guard let typed = Self.typed(from: anchor, to: textBefore) else { return nil }
         guard !typed.isEmpty else { return self }
         let remaining = candidates.compactMap { candidate -> String? in
             let key = ShownSuggestion.normalized(candidate)
@@ -39,6 +34,17 @@ struct ActiveSuggestion: Equatable {
         return ActiveSuggestion(
             fieldID: fieldID, anchor: textBefore, candidates: remaining, kind: kind, isDrawn: isDrawn, isPartlyAccepted: isPartlyAccepted
         )
+    }
+
+    /// Normalization maps each character to one character, so when the raw text extends the anchor only the
+    /// appended part needs it.
+    private static func typed(from anchor: String, to textBefore: String) -> String? {
+        if textBefore.hasPrefix(anchor) {
+            return ShownSuggestion.normalized(String(textBefore.dropFirst(anchor.count)))
+        }
+        return TextContinuation.appended(
+            from: ShownSuggestion.normalized(anchor), to: ShownSuggestion.normalized(textBefore)
+        ).map(String.init)
     }
 
     func merged(with newer: ActiveSuggestion, settled: Bool) -> ActiveSuggestion {
