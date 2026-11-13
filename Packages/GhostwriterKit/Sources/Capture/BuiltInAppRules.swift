@@ -12,6 +12,10 @@ public enum BuiltInAppRules {
         AppCatalog.terminals.contains(bundleID)
     }
 
+    public static func isCodeEditor(_ bundleID: String) -> Bool {
+        AppCatalog.isCodeEditor(bundleID)
+    }
+
     public static func domainRule(forHost host: String) -> AppRule? {
         let host = DomainPattern.normalize(host)
         return domainRules.first { DomainPattern.matches($0.pattern, host: host) }?.rule

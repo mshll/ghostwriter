@@ -4,7 +4,7 @@ import Foundation
 /// Ghostwriter inserted. Holds counts and Ghostwriter's own insertions, never the typed keys.
 public struct FieldWriting: Sendable {
     public static let minimumTyped = 20
-    public static let minimumLength = 100
+    public static let minimumLength = WritingSession.minimumCharacters
     public static let maximumLength = 8_000
     static let contextLength = 1_000
     static let removableLength = 12

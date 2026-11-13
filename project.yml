@@ -58,7 +58,7 @@ targets:
           OTHER_CODE_SIGN_FLAGS: --timestamp
     dependencies:
       - package: GhostwriterKit
-        products: [GWCore, Inference, Prompting, Memory, Capture, Input, Overlay, ScreenContext, Actions, Proofing]
+        products: [GWCore, Inference, Prompting, Memory, Capture, Input, Overlay, ScreenContext, Actions, Proofing, CotypistImport]
       - package: KeyboardShortcuts
       - package: Sparkle
     scheme: {}
