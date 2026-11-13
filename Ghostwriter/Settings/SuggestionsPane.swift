@@ -91,6 +91,7 @@ struct SuggestionsPane: View {
         case .ready: return nil
         case .downloading: return "Suggestions start when the model finishes downloading."
         case .loading: return "The model is loading."
+        case .unloadedWhileOff: return "Suggestions are off everywhere."
         case .notInstalled: return "Download a model in Model to get suggestions."
         case .failed: return "The model failed to load. See Model."
         }

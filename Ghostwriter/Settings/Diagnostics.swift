@@ -56,6 +56,7 @@ extension ModelStatus {
         case .downloading: "downloading"
         case .loading: "loading"
         case .ready: "ready"
+        case .unloadedWhileOff: "unloaded while off everywhere"
         case .failed(let message): "failed: \(message)"
         }
     }
