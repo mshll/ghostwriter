@@ -107,7 +107,12 @@ struct ModelStep: View {
             Text("Downloaded once from Hugging Face, then it works offline.")
                 .font(.system(size: 13))
                 .foregroundStyle(OnboardingStyle.muted)
+            if !library.foundModels.isEmpty {
+                FoundModels(model: model)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.25), value: library.foundModels)
         .onAppear(perform: library.refresh)
     }
 
@@ -150,6 +155,74 @@ private struct ModelRow: View {
         if !spec.summary.isEmpty { parts.append(spec.summary) }
         if library.isInstalled(spec) { parts.append("Downloaded.") }
         return parts.joined(separator: " ")
+    }
+}
+
+private struct FoundModels: View {
+    private static let maxListHeight: CGFloat = 176
+
+    let model: OnboardingModel
+    @Environment(ModelLibrary.self) private var library
+    @State private var listHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Found on this Mac")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(OnboardingStyle.muted)
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(library.foundModels) { found in
+                        FoundModelRow(found: found) { model.use(found) }
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: min(listHeight, Self.maxListHeight))
+            if let error = model.foundModelError {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+            }
+        }
+        .padding(.horizontal, 24)
+        .frame(width: 580)
+    }
+}
+
+private struct FoundModelRow: View {
+    let found: FoundModel
+    let use: () -> Void
+    @Environment(ModelLibrary.self) private var library
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(found.displayName)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(OnboardingStyle.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(found.sizeAndSource)
+                    .font(.system(size: 12))
+                    .foregroundStyle(OnboardingStyle.muted)
+                    .monospacedDigit()
+                if library.mayExceedMemory(bytes: found.sizeBytes) {
+                    Label("May be too large for this Mac\u{2019}s memory.", systemImage: "memorychip")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+                }
+            }
+            Spacer(minLength: 0)
+            Button("Use", action: use)
+                .buttonStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(OnboardingStyle.ink)
+        }
+        .padding(.vertical, 8)
     }
 }
 

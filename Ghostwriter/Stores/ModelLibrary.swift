@@ -185,3 +185,9 @@ final class ModelLibrary {
         }
     }
 }
+
+extension FoundModel {
+    var sizeAndSource: String {
+        "\(sizeBytes.formatted(.byteCount(style: .file))) \u{00B7} \(source.rawValue)"
+    }
+}
