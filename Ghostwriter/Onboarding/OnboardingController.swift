@@ -5,6 +5,7 @@ import Input
 import ScreenContext
 import SpriteKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 final class OnboardingController {
     private let window: OnboardingWindow
@@ -63,6 +64,7 @@ final class OnboardingController {
         model.onFinish = { [weak self] in self?.leave() }
         model.onBringToFront = { [weak self] in self?.bringToFront() }
         model.onGuide = { [weak self] topic in self?.showGuide(topic) }
+        model.onChooseModelFile = { [weak self] in self?.chooseModelFile() }
         guide.onBack = { [weak self] in self?.bringToFront() }
         model.onStepChange = { [weak self] step in
             self?.guide.hide()
@@ -95,6 +97,17 @@ final class OnboardingController {
             case .screenRecording: ScreenRecordingPermission.isAllowedInSettings
             case .pasteboard: ClipboardReader.accessAllowed
             }
+        }
+    }
+
+    private func chooseModelFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "gguf") ?? .data]
+        panel.prompt = "Use"
+        NSApp.activate()
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.model.useModelFile(at: url)
         }
     }
 

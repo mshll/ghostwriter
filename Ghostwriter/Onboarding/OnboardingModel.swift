@@ -49,6 +49,7 @@ final class OnboardingModel {
     private(set) var isLeaving = false
     private(set) var skipArmed = false
     var chosenModelID: String?
+    private(set) var modelFileError: String?
     var statusItemFrame: CGRect?
 
     @ObservationIgnored var onDropWord: (String) -> Void = { _ in }
@@ -56,6 +57,7 @@ final class OnboardingModel {
     @ObservationIgnored var onBringToFront: () -> Void = {}
     @ObservationIgnored var onStepChange: (OnboardingStep) -> Void = { _ in }
     @ObservationIgnored var onGuide: (PermissionTopic) -> Void = { _ in }
+    @ObservationIgnored var onChooseModelFile: () -> Void = {}
     private(set) var guidedTopics: Set<PermissionTopic> = []
 
     @ObservationIgnored private let appState: AppState
@@ -191,6 +193,18 @@ final class OnboardingModel {
         } else {
             library.download(spec)
         }
+        completeHeadline(thenAdvance: true)
+    }
+
+    func useModelFile(at url: URL) {
+        do {
+            try library.useModelFile(at: url)
+        } catch {
+            modelFileError = error.localizedDescription
+            return
+        }
+        modelFileError = nil
+        chosenModelID = library.activeModel?.id
         completeHeadline(thenAdvance: true)
     }
 

@@ -107,6 +107,16 @@ struct ModelStep: View {
             Text("Downloaded once from Hugging Face, then it works offline.")
                 .font(.system(size: 13))
                 .foregroundStyle(OnboardingStyle.muted)
+            VStack(spacing: 12) {
+                Button("Use your own .gguf file\u{2026}") { model.onChooseModelFile() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(OnboardingStyle.ink)
+                if let error = model.modelFileError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+            .font(.system(size: 13, weight: .medium))
         }
         .onAppear(perform: library.refresh)
     }
