@@ -177,9 +177,7 @@ enum GhostLayout {
     static func lineEnd(of text: String, font: NSFont, room: CGFloat) -> String.Index {
         var end = text.startIndex
         for next in lineBreaks(in: text).filter({ $0 > text.startIndex }) + [text.endIndex] {
-            let piece = text[..<next]
-            let visible = piece[..<(piece.lastIndex { !$0.isWhitespace }.map(piece.index(after:)) ?? piece.startIndex)]
-            guard textWidth(visible, font: font) <= room else { break }
+            guard textWidth(visible(text[..<next]), font: font) <= room else { break }
             end = next
         }
         return end
@@ -274,15 +272,33 @@ enum GhostLayout {
         let room = snapshot.direction == .leftToRight ? caretX - range.lowerBound : range.upperBound - caretX
         let wraps = !line.isEmpty && holdsSeveralLines(field: snapshot.fieldFrame, caret: snapshot.caretRect)
         let tolerance = max(2, room / 50)
-        var lineWidth: CGFloat?
-        for start in (wraps ? lineBreaks(in: line) : [line.startIndex]).reversed() {
-            let width = textWidth(line[start...], font: font)
+        let starts = wraps ? lineBreaks(in: line) : [line.startIndex]
+        var lineStart: (index: Int, width: CGFloat)?
+        for index in starts.indices.reversed() {
+            let width = textWidth(line[starts[index]...], font: font)
             guard width <= room + tolerance else { break }
-            lineWidth = width
+            lineStart = (index, width)
         }
-        guard let lineWidth else { return 0 }
-        let inset = max(room - lineWidth, 0)
+        guard let lineStart, isPlausibleWrap(line, at: lineStart.index, of: starts, font: font, tolerance: tolerance)
+        else { return 0 }
+        let inset = max(room - lineStart.width, 0)
         return inset <= (range.upperBound - range.lowerBound) / 3 ? inset : 0
+    }
+
+    /// The host starts a line inside a paragraph only once the line before it is full: the text before the line and
+    /// its first word, which did not fit there, are wider than the line itself. Text the field draws narrower than it
+    /// reads, such as an inline chip, can make a shorter tail look like a wrapped line.
+    static func isPlausibleWrap(
+        _ line: String, at index: Int, of starts: [String.Index], font: NSFont, tolerance: CGFloat
+    ) -> Bool {
+        let start = starts[index]
+        guard start > line.startIndex else { return true }
+        let firstWordEnd = starts.indices.contains(index + 1) ? starts[index + 1] : line.endIndex
+        return textWidth(visible(line[..<firstWordEnd]), font: font) > textWidth(visible(line[start...]), font: font) - tolerance
+    }
+
+    static func visible(_ text: Substring) -> Substring {
+        text[..<(text.lastIndex { !$0.isWhitespace }.map(text.index(after:)) ?? text.startIndex)]
     }
 
     static func holdsSeveralLines(field: CGRect, caret: CGRect) -> Bool {
