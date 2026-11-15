@@ -62,11 +62,13 @@ final class ModelLibrary {
 
     func use(_ found: FoundModel) throws {
         let destination = AppPaths.models.appending(path: found.fileName)
-        guard (try? FileManager.default.attributesOfItem(atPath: destination.path)) == nil else {
-            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+        if destination.resolvingSymlinksInPath().path != found.url.path {
+            guard (try? FileManager.default.attributesOfItem(atPath: destination.path)) == nil else {
+                throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+            }
+            try FileManager.default.createDirectory(at: AppPaths.models, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: found.url)
         }
-        try FileManager.default.createDirectory(at: AppPaths.models, withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: found.url)
         refresh()
         if let spec = models.first(where: { $0.fileName == found.fileName }) {
             select(spec)
@@ -181,5 +183,11 @@ final class ModelLibrary {
         } else {
             appState.modelStatus = .notInstalled
         }
+    }
+}
+
+extension FoundModel {
+    var sizeAndSource: String {
+        "\(sizeBytes.formatted(.byteCount(style: .file))) \u{00B7} \(source.rawValue)"
     }
 }

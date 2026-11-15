@@ -173,7 +173,7 @@ private struct FoundModelRow: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(found.displayName).fontWeight(.medium)
-                Text("\(found.sizeBytes.formatted(.byteCount(style: .file))) \u{00B7} \(found.source.rawValue)")
+                Text(found.sizeAndSource)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if library.mayExceedMemory(bytes: found.sizeBytes) {

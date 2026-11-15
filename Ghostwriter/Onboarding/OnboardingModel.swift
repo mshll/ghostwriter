@@ -49,6 +49,7 @@ final class OnboardingModel {
     private(set) var isLeaving = false
     private(set) var skipArmed = false
     var chosenModelID: String?
+    private(set) var foundModelError: String?
     var statusItemFrame: CGRect?
 
     @ObservationIgnored var onDropWord: (String) -> Void = { _ in }
@@ -191,6 +192,18 @@ final class OnboardingModel {
         } else {
             library.download(spec)
         }
+        completeHeadline(thenAdvance: true)
+    }
+
+    func use(_ found: FoundModel) {
+        do {
+            try library.use(found)
+        } catch {
+            foundModelError = error.localizedDescription
+            return
+        }
+        foundModelError = nil
+        chosenModelID = library.activeModel?.id
         completeHeadline(thenAdvance: true)
     }
 

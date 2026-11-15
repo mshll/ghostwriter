@@ -64,7 +64,7 @@ Ghostwriter updates itself. Settings > Updates controls the checks.
 A full-screen setup walks you through these steps:
 
 1. **Accessibility** (required): lets Ghostwriter read the field you type in and type the words you take.
-2. **A model.** Ghostwriter recommends one for your Mac's memory and chip, then downloads it in the background and checks its checksum.
+2. **A model.** Ghostwriter recommends one for your Mac's memory and chip, then downloads it in the background and checks its checksum. Base models already on your Mac are listed under Found on this Mac; Use links one in without copying it.
 3. **Make it yours** (optional): your name, a few lines about how you write, learning from your writing, and fixing obvious typos as you type.
 4. **Context** (optional): text from the window you type in, screenshots for apps that hide their text (Screen Recording), and text you copied (Paste from Other Apps).
 5. **Try it** in a practice field, then choose whether Ghostwriter opens at login.
@@ -103,7 +103,7 @@ Ghostwriter runs a base (pretrained) model through [llama.cpp](https://github.co
 
 If the same file is already on your Mac from the Hugging Face cache, llama.cpp, LM Studio or Ollama, Ghostwriter links to it instead of downloading it again.
 
-To use your own model, put a base `.gguf` file in `~/Library/Application Support/com.mshl.ghostwriter/Models/` and click Refresh in Settings > Model. Base models you already have in the Hugging Face cache, llama.cpp, LM Studio or Ollama are listed in Settings > Model under Found on this Mac; Use links one in without copying it. Each model has its own license; Gemma models are provided under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
+To use your own model, put a base `.gguf` file in `~/Library/Application Support/com.mshl.ghostwriter/Models/` and click Refresh in Settings > Model. Base models you already have in the Hugging Face cache, llama.cpp, LM Studio or Ollama are listed under Found on this Mac in setup and in Settings > Model; Use links one in without copying it. Each model has its own license; Gemma models are provided under the [Gemma Terms of Use](https://ai.google.dev/gemma/terms).
 
 [docs/MODELS.md](docs/MODELS.md) explains why base models, and how these were selected and measured.
 
