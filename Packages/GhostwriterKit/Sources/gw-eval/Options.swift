@@ -37,7 +37,6 @@ struct Options {
     var swapMode = SwapMode.staged
     var swapAt = 2
     var readLag = 0.0
-    var settle: Double? = ShownSuggestion.settleMilliseconds
     var finalOnly = false
     var pause = 1500.0
     var pauseTyped = 6
@@ -68,10 +67,9 @@ struct Options {
                        [--typing-speed <characters per second>]   (suggestions that arrive after the next keystroke are late)
                        [--engine continuous|economy|oneshot]   (clocked keystrokes through the engine's suggestion stream)
                        [--read-lag <ms>]   (with --engine continuous|economy: typed text reaches the engine, and new suggestions the screen, at the field read)
-                       [--settle <ms>] [--keep-shown]   (a finished search replaces the shown suggestion this long after a key press, or never)
                        [--final-only]   (show only finished searches, none of the text streamed before)
                gw-eval --typing --foundation --set <jsonl> [--limit N] [--verbose]   (the same with Apple's on-device model)
-               gw-eval --pause <ms> --set <jsonl> [--pause-typed N (6)] [--typing-speed N] [--read-lag <ms>] [--settle <ms>] [--keep-shown] [--final-only] [--json out.json]
+               gw-eval --pause <ms> --set <jsonl> [--pause-typed N (6)] [--typing-speed N] [--read-lag <ms>] [--final-only] [--json out.json]
                        (pause test: type the last N characters of each row's text, wait, take the suggestion shown)
                gw-eval --swap none|direct|staged --set <jsonl with screen text> [--model <gguf>] [--limit N] [--typing-speed N] [--swap-at N] [--staging-chunk N]
                        (real-time typing while the screen text lands: how long keystrokes wait for a matching suggestion)
@@ -153,11 +151,6 @@ struct Options {
                 guard let mode = EngineMode(rawValue: name) else { throw UsageError("unknown engine \(name)") }
                 options.engineMode = mode
             case "--foundation": options.backend = .foundation
-            case "--settle":
-                let x: Double = try number(flag)
-                guard x >= 0 else { throw UsageError("--settle must be 0 or more") }
-                options.settle = x
-            case "--keep-shown": options.settle = nil
             case "--final-only": options.finalOnly = true
             case "--pause":
                 let x: Double = try number(flag)
