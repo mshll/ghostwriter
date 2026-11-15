@@ -9,7 +9,6 @@ public struct FoundModel: Sendable, Hashable, Identifiable {
         case llamaCpp = "llama.cpp"
         case lmStudio = "LM Studio"
         case ollama = "Ollama"
-        case chosenFile = "Chosen file"
     }
 
     public var url: URL
@@ -19,19 +18,6 @@ public struct FoundModel: Sendable, Hashable, Identifiable {
     public var sizeBytes: Int64
 
     public var id: String { url.path }
-}
-
-public enum ModelFileError: LocalizedError, Equatable {
-    case unreadable, notModel, splitModel, notBaseModel
-
-    public var errorDescription: String? {
-        switch self {
-        case .unreadable: "Ghostwriter can\u{2019}t read this file."
-        case .notModel: "This file isn\u{2019}t a GGUF text model."
-        case .splitModel: "This is one part of a split model. Choose a single-file .gguf model."
-        case .notBaseModel: "This is an instruct or chat model. Ghostwriter needs a base (pretrained) model."
-        }
-    }
 }
 
 public struct LocalModelFinder: Sendable {
@@ -64,7 +50,7 @@ public struct LocalModelFinder: Sendable {
         var seen = Set<String>()
         return entries()
             .filter { seen.insert($0.url.path).inserted }
-            .compactMap { try? Self.inspect($0) }
+            .compactMap(Self.describe)
             .filter { !curatedSizes.contains($0.sizeBytes) }
             .sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
     }
@@ -129,19 +115,15 @@ public struct LocalModelFinder: Sendable {
         }
     }
 
-    public static func model(at url: URL) throws(ModelFileError) -> FoundModel {
-        try inspect(Entry(url: url.resolvingSymlinksInPath(), fileName: url.lastPathComponent, source: .chosenFile))
-    }
-
-    static func inspect(_ entry: Entry) throws(ModelFileError) -> FoundModel {
-        guard entry.fileName.firstMatch(of: /-\d{5}-of-\d{5}\.gguf$/) == nil else { throw .splitModel }
-        guard let size = fileSize(entry.url) else { throw .unreadable }
-        guard let metadata = GGUFMetadata(url: entry.url),
+    static func describe(_ entry: Entry) -> FoundModel? {
+        guard entry.fileName.firstMatch(of: /-\d{5}-of-\d{5}\.gguf$/) == nil,
+              let size = fileSize(entry.url),
+              let metadata = GGUFMetadata(url: entry.url),
               metadata.type ?? "model" == "model",
               !(metadata.architecture ?? "").contains("bert"), metadata.architecture != "clip"
-        else { throw .notModel }
+        else { return nil }
         let labels = [entry.label, metadata.name, metadata.finetune, entry.fileName].compactMap(\.self)
-        guard isBaseModel(labels: labels, requiresBaseWord: entry.source == .ollama) else { throw .notBaseModel }
+        guard isBaseModel(labels: labels, requiresBaseWord: entry.source == .ollama) else { return nil }
         let name = entry.label ?? metadata.name ?? entry.url.deletingPathExtension().lastPathComponent
         return FoundModel(url: entry.url, fileName: entry.fileName, displayName: name, source: entry.source, sizeBytes: size)
     }

@@ -99,27 +99,4 @@ import Testing
                   at: ".ollama/models/manifests/registry.ollama.ai/library/tiny/latest")
         #expect(LocalModelFinder(home: home).baseModels().isEmpty)
     }
-
-    @Test func describesAChosenFileThroughItsLink() throws {
-        let file = try place(gguf(["general.name": "Tiny Base"]), at: "Downloads/tiny.gguf")
-        let link = home.appending(path: "Desktop/tiny-link.gguf")
-        try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
-        let model = try LocalModelFinder.model(at: link)
-        #expect(model.url == file.resolvingSymlinksInPath())
-        #expect(model.fileName == "tiny-link.gguf" && model.displayName == "Tiny Base" && model.source == .chosenFile)
-        #expect(model.sizeBytes == Int64(try Data(contentsOf: file).count))
-    }
-
-    @Test func rejectsAChosenFileWithItsReason() throws {
-        let instruct = try place(gguf(["general.name": "Tiny", "general.finetune": "instruct"]), at: "a/tiny.gguf")
-        let split = try place(gguf(["general.name": "Tiny"]), at: "b/tiny-00001-of-00002.gguf")
-        let sealed = try place(Data([0x9f, 0x2d, 0xc0, 0x28]) + Data(count: 64), at: "c/sealed.gguf")
-        let embedding = try place(gguf(["general.name": "Tiny", "general.architecture": "bert"]), at: "d/tiny.gguf")
-        #expect(throws: ModelFileError.notBaseModel) { try LocalModelFinder.model(at: instruct) }
-        #expect(throws: ModelFileError.splitModel) { try LocalModelFinder.model(at: split) }
-        #expect(throws: ModelFileError.notModel) { try LocalModelFinder.model(at: sealed) }
-        #expect(throws: ModelFileError.notModel) { try LocalModelFinder.model(at: embedding) }
-        #expect(throws: ModelFileError.unreadable) { try LocalModelFinder.model(at: home.appending(path: "missing.gguf")) }
-    }
 }

@@ -60,10 +60,6 @@ final class ModelLibrary {
         scanForFoundModels()
     }
 
-    func useModelFile(at url: URL) throws {
-        try use(LocalModelFinder.model(at: url))
-    }
-
     func use(_ found: FoundModel) throws {
         let destination = AppPaths.models.appending(path: found.fileName)
         if destination.resolvingSymlinksInPath().path != found.url.path {
