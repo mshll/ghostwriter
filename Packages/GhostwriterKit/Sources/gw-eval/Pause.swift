@@ -85,6 +85,7 @@ private func pauseRow(_ row: Row, harness: Harness, interval: Double) async thro
     func apply(_ publication: Publication, at time: Double) {
         guard let issued = requests[publication.request] else { return }
         let update = publication.update
+        guard update.isFinal || !options.finalOnly else { return }
         let candidates = advance(update.candidates.map { folded($0.text) }, by: tail[issued.typed..<typed].joined())
         if update.isFinal, issued.typed == typedCount { result.finalBest = candidates.first ?? "" }
         var settled = false

@@ -145,6 +145,7 @@ private struct ClockedRow {
         func apply(_ publication: Publication, at time: Double) throws {
             guard let issued = requests[publication.request] else { return }
             if publication.update.isFinal, inFlight == publication.request { inFlight = nil }
+            guard publication.update.isFinal || !harness.options.finalOnly else { return }
             let typedSince = String(target[issued.typed..<typed])
             let candidates = advance(publication.update.candidates.map { folded($0.text) }, by: typedSince)
             if candidates.isEmpty {
