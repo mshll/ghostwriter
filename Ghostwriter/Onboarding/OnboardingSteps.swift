@@ -107,13 +107,17 @@ struct ModelStep: View {
             Text("Downloaded once from Hugging Face, then it works offline.")
                 .font(.system(size: 13))
                 .foregroundStyle(OnboardingStyle.muted)
-            if !library.foundModels.isEmpty {
+            if showsFoundModels {
                 FoundModels(model: model)
-                    .transition(.opacity)
+                    .transition(.opacity.animation(.easeOut(duration: 0.25)))
             }
         }
         .animation(.easeOut(duration: 0.25), value: library.foundModels)
         .onAppear(perform: library.refresh)
+    }
+
+    private var showsFoundModels: Bool {
+        library.downloadProgress.isEmpty && !library.foundModels.isEmpty
     }
 
     private var listed: [ModelSpec] {
@@ -163,23 +167,17 @@ private struct FoundModels: View {
 
     let model: OnboardingModel
     @Environment(ModelLibrary.self) private var library
-    @State private var listHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Found on this Mac")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(OnboardingStyle.muted)
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(library.foundModels) { found in
-                        FoundModelRow(found: found) { model.use(found) }
-                    }
-                }
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
+            ViewThatFits(in: .vertical) {
+                rows
+                ScrollView { rows }
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .frame(height: min(listHeight, Self.maxListHeight))
+            .frame(maxHeight: Self.maxListHeight)
             if let error = model.foundModelError {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 13, weight: .medium))
@@ -190,6 +188,14 @@ private struct FoundModels: View {
         }
         .padding(.horizontal, 24)
         .frame(width: 580)
+    }
+
+    private var rows: some View {
+        VStack(spacing: 0) {
+            ForEach(library.foundModels) { found in
+                FoundModelRow(found: found) { model.use(found) }
+            }
+        }
     }
 }
 
