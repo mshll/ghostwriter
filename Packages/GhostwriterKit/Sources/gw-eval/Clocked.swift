@@ -131,13 +131,9 @@ private struct ClockedRow {
         var nextRead = 0.0
         var readSubmits = false
 
-        var latest: Int?
-        var settles: [(time: Double, publication: Publication)] = []
-
         func submit(at time: Double) throws {
             let subscription = engine.suggestions(for: try harness.request(for: row, before: row.before + String(target[..<typed])))
             requests[subscription.id] = (typed, time)
-            latest = subscription.id
             inFlight = subscription.id
             result.requests += 1
         }
@@ -145,6 +141,7 @@ private struct ClockedRow {
         func apply(_ publication: Publication, at time: Double) throws {
             guard let issued = requests[publication.request] else { return }
             if publication.update.isFinal, inFlight == publication.request { inFlight = nil }
+            guard publication.update.isFinal || !harness.options.finalOnly else { return }
             let typedSince = String(target[issued.typed..<typed])
             let candidates = advance(publication.update.candidates.map { folded($0.text) }, by: typedSince)
             if candidates.isEmpty {
@@ -154,13 +151,8 @@ private struct ClockedRow {
                 }
                 return
             }
-            var settled = false
-            if publication.update.isFinal, !result.midLine, let settle = harness.options.settle {
-                settled = time - issued.at >= settle
-                if !settled { settles.append((issued.at + settle, publication)) }
-            }
             let drawn = time >= nextRead || (visibleDrawn && !visible.isEmpty)
-            let merged = ShownSuggestion.merge(shown: visible, drawn: drawn, update: candidates, settled: settled)
+            let merged = ShownSuggestion.merge(shown: visible, drawn: drawn, update: candidates)
             let replaces = drawn && visible.first.map { !merged[0].hasPrefix($0) } ?? false
             if visible.isEmpty || replaces {
                 visibleDrawn = drawn
@@ -195,9 +187,7 @@ private struct ClockedRow {
         }
 
         func deliver(until time: Double) throws {
-            let settled = settles.filter { $0.time <= time && $0.publication.request == latest }
-            settles.removeAll { $0.time <= time || $0.publication.request != latest }
-            let due = (pending.filter { $0.time <= time } + settled).sorted { $0.time < $1.time }
+            let due = pending.filter { $0.time <= time }
             pending.removeAll { $0.time <= time }
             for (time, publication) in due { try apply(publication, at: time) }
         }

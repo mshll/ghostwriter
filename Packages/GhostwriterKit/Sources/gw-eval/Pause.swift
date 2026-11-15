@@ -74,27 +74,21 @@ private func pauseRow(_ row: Row, harness: Harness, interval: Double) async thro
     var visible: [String] = []
     var visibleDrawn = false
     var nextRead = 0.0
-    var requests: [Int: (typed: Int, at: Double)] = [:]
+    var requests: [Int: Int] = [:]
     var pending: [(time: Double, publication: Publication)] = []
-    var settles: [(time: Double, publication: Publication)] = []
-    var latest: Int?
     var clock = 0.0
     let lastKey = interval * Double(typedCount - 1)
     let readAt = lastKey + options.pause
 
     func apply(_ publication: Publication, at time: Double) {
-        guard let issued = requests[publication.request] else { return }
+        guard let issuedTyped = requests[publication.request] else { return }
         let update = publication.update
-        let candidates = advance(update.candidates.map { folded($0.text) }, by: tail[issued.typed..<typed].joined())
-        if update.isFinal, issued.typed == typedCount { result.finalBest = candidates.first ?? "" }
-        var settled = false
-        if update.isFinal, (row.after ?? "").isEmpty, let settle = options.settle {
-            settled = time - issued.at >= settle
-            if !settled { settles.append((issued.at + settle, publication)) }
-        }
+        guard update.isFinal || !options.finalOnly else { return }
+        let candidates = advance(update.candidates.map { folded($0.text) }, by: tail[issuedTyped..<typed].joined())
+        if update.isFinal, issuedTyped == typedCount { result.finalBest = candidates.first ?? "" }
         guard !candidates.isEmpty else { return }
         let drawn = time >= nextRead || (visibleDrawn && !visible.isEmpty)
-        let merged = ShownSuggestion.merge(shown: visible, drawn: drawn, update: candidates, settled: settled)
+        let merged = ShownSuggestion.merge(shown: visible, drawn: drawn, update: candidates)
         let replaces = drawn && visible.first.map { !merged[0].hasPrefix($0) } ?? false
         if visible.isEmpty || replaces {
             visibleDrawn = drawn
@@ -117,9 +111,7 @@ private func pauseRow(_ row: Row, harness: Harness, interval: Double) async thro
     }
 
     func deliver(until time: Double) {
-        let settled = settles.filter { $0.time <= time && $0.publication.request == latest }
-        settles.removeAll { $0.time <= time || $0.publication.request != latest }
-        let due = (pending.filter { $0.time <= time } + settled).sorted { $0.time < $1.time }
+        let due = pending.filter { $0.time <= time }
         pending.removeAll { $0.time <= time }
         for (at, publication) in due { apply(publication, at: at) }
     }
@@ -150,8 +142,7 @@ private func pauseRow(_ row: Row, harness: Harness, interval: Double) async thro
         await runUntil(read)
         visibleDrawn = true
         let subscription = engine.suggestions(for: try harness.request(for: row, before: prefix + rawTail[..<typed].joined()))
-        requests[subscription.id] = (typed, read)
-        latest = subscription.id
+        requests[subscription.id] = typed
     }
     await runUntil(readAt)
     result.completion = visible.first ?? ""

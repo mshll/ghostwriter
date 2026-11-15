@@ -584,7 +584,7 @@ final class CompletionCoordinator {
             let stats = await services.engine.lastStats
             Self.log.info("Timing ms: context \(Self.ms(contextReady - started), privacy: .public), prompt \(Self.ms(promptReady - contextReady), privacy: .public), engine \(Self.ms(done - promptReady), privacy: .public) (prefill \(Int(stats.prefillMilliseconds), privacy: .public), search \(Int(stats.searchMilliseconds), privacy: .public), rerank \(Int(stats.rerankMilliseconds), privacy: .public)), tokens \(stats.reusedTokens, privacy: .public)/\(stats.promptTokens, privacy: .public) reused, \(candidates.count, privacy: .public) candidates")
             guard !Task.isCancelled else { return }
-            present(candidates.map(\.text), from: snapshot, kind: mode == .draft ? .draft : .completion, settled: true)
+            present(candidates.map(\.text), from: snapshot, kind: mode == .draft ? .draft : .completion)
         } catch is CancellationError {
             return
         } catch {
@@ -597,9 +597,7 @@ final class CompletionCoordinator {
         forced: Bool
     ) async {
         let subscription = services.engine.suggestions(for: request)
-        let settles = keystroke.map { $0 + .milliseconds(ShownSuggestion.settleMilliseconds) }
         var logged = false
-        var unsettled: [String]?
         for await update in subscription.updates {
             guard !Task.isCancelled else { return }
             if !logged, !update.candidates.isEmpty {
@@ -607,24 +605,12 @@ final class CompletionCoordinator {
                 let sinceKey = keystroke.map { Self.ms(ContinuousClock.now - $0) } ?? -1
                 Self.log.info("Suggestion ms: \(sinceKey, privacy: .public) after the keystroke, prompt \(Self.ms(preparation), privacy: .public), engine \(Int(update.milliseconds), privacy: .public), \(update.reused ? "reused" : "new", privacy: .public) search, \(update.isFinal ? "final" : "growing", privacy: .public)")
             }
-            let texts = update.candidates.map(\.text)
-            let replaces = update.isFinal && !snapshot.isMidLine
-            let settled = replaces && settles.map { ContinuousClock.now >= $0 } ?? replaces
-            if replaces, !settled { unsettled = texts }
-            present(texts, from: snapshot, kind: .completion, settled: settled)
+            present(update.candidates.map(\.text), from: snapshot, kind: .completion)
         }
         if !logged, !Task.isCancelled {
             Self.log.info("Suggestion: none for this text (\(snapshot.isMidLine ? "mid-line" : "line end", privacy: .public))")
             if forced { NSSound.beep() }
         }
-        guard let unsettled, let settles else { return }
-        do {
-            try await Task.sleep(until: settles, clock: .continuous)
-        } catch {
-            return
-        }
-        guard lastTyping == keystroke else { return }
-        present(unsettled, from: snapshot, kind: .completion, settled: true)
     }
 
     private func buildPrompt(
@@ -808,7 +794,7 @@ final class CompletionCoordinator {
 
     // MARK: Showing suggestions
 
-    private func present(_ texts: [String], from snapshot: FieldSnapshot, kind: ActiveSuggestion.Kind, settled: Bool) {
+    private func present(_ texts: [String], from snapshot: FieldSnapshot, kind: ActiveSuggestion.Kind) {
         let signpost = Self.signposter.beginInterval("Present")
         defer { Self.signposter.endInterval("Present", signpost) }
         let candidates = texts.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -819,7 +805,7 @@ final class CompletionCoordinator {
         let fresh = ActiveSuggestion(fieldID: snapshot.id, anchor: snapshot.textBefore, candidates: candidates, kind: kind)
         guard var next = fresh.advanced(to: textBefore) else { return }
         if kind == .completion, let shown = suggestion, shown.kind == .completion, let aligned = shown.advanced(to: textBefore) {
-            next = aligned.merged(with: next, settled: settled)
+            next = aligned.merged(with: next)
         }
         guard next != suggestion else { return }
         // Until the field reports the typed text the caret position is stale; the read that follows shows it.
@@ -953,7 +939,6 @@ final class CompletionCoordinator {
         noteUsed(current, in: snapshot)
         typedSinceRead += chunk
         suggestion = current.advanced(to: current.anchor + chunk)
-        suggestion?.isPartlyAccepted = true
         // The ghost stays up: the inserted word lands on its own ghost letters, and the field read that
         // follows redraws the rest at the new caret.
         if suggestion == nil {

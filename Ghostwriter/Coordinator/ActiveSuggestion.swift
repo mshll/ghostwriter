@@ -15,7 +15,6 @@ struct ActiveSuggestion: Equatable {
     var candidates: [String]
     var kind: Kind
     var isDrawn = false
-    var isPartlyAccepted = false
 
     var text: String { candidates.first ?? "" }
 
@@ -32,7 +31,7 @@ struct ActiveSuggestion: Equatable {
         }
         guard !remaining.isEmpty else { return nil }
         return ActiveSuggestion(
-            fieldID: fieldID, anchor: textBefore, candidates: remaining, kind: kind, isDrawn: isDrawn, isPartlyAccepted: isPartlyAccepted
+            fieldID: fieldID, anchor: textBefore, candidates: remaining, kind: kind, isDrawn: isDrawn
         )
     }
 
@@ -47,13 +46,11 @@ struct ActiveSuggestion: Equatable {
         ).map(String.init)
     }
 
-    func merged(with newer: ActiveSuggestion, settled: Bool) -> ActiveSuggestion {
+    func merged(with newer: ActiveSuggestion) -> ActiveSuggestion {
         guard newer.anchor == anchor, newer.kind == kind else { return newer }
-        let candidates = ShownSuggestion.merge(
-            shown: self.candidates, drawn: isDrawn, update: newer.candidates, settled: settled && !isPartlyAccepted
-        )
+        let candidates = ShownSuggestion.merge(shown: self.candidates, drawn: isDrawn, update: newer.candidates)
         return ActiveSuggestion(
-            fieldID: fieldID, anchor: anchor, candidates: candidates, kind: kind, isDrawn: isDrawn, isPartlyAccepted: isPartlyAccepted
+            fieldID: fieldID, anchor: anchor, candidates: candidates, kind: kind, isDrawn: isDrawn
         )
     }
 }
