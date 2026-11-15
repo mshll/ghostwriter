@@ -336,6 +336,74 @@ import Testing
         let scrolled = snapshot(before: text, lineTail: "the whole week", field: field)
         #expect(inset(scrolled) == 0)
     }
+
+    /// One line of a paragraph with an inline chip that the field reads as longer text than it draws.
+    private func lineWithChip(_ direction: WritingDirection) -> (read: String, drawn: String) {
+        let (before, after) = direction == .leftToRight
+            ? ("go. use ", " . also use the half tone charts we have. and build on it if there's a specific chart no")
+            : ("استخدم ", " . واستخدم أيضا الرسوم البيانية التي لدينا وابن عليها إذا كان هناك رسم محدد غير")
+        return (before + "skill:build_ui_from_the_library" + after, before + "build-ui" + after)
+    }
+
+    @Test(arguments: [WritingDirection.leftToRight, .rightToLeft])
+    func lineDrawnNarrowerThanItsTextIsNotTakenForASoftWrap(direction: WritingDirection) {
+        let line = lineWithChip(direction)
+        let drawnWidth = GhostLayout.textWidth(line.drawn, font: font.font)
+        #expect(GhostLayout.textWidth(line.read, font: font.font) > drawnWidth + 50)
+        let field = CGRect(x: 100, y: 40, width: 5 + drawnWidth + 10, height: 200)
+        #expect(inset(snapshot(before: line.read, lineTail: line.drawn, field: field, direction: direction)) == 0)
+    }
+
+    @Test(arguments: [WritingDirection.leftToRight, .rightToLeft])
+    func wrappedGhostLinesStartAtTheFieldTextEdge(direction: WritingDirection) throws {
+        let caretHeight: CGFloat = 16
+        let font = FontCache().font(for: FieldStyle(), caretHeight: caretHeight)
+        let line = lineWithChip(direction)
+        let drawnWidth = GhostLayout.textWidth(line.drawn, font: font.font)
+        let field = CGRect(x: 100, y: 100, width: (drawnWidth + 10).rounded(.up), height: 200)
+        let caretX = direction == .leftToRight ? field.minX + drawnWidth : field.maxX - drawnWidth
+        let caret = CGRect(x: caretX, y: field.minY + 4, width: 1, height: caretHeight)
+        let snapshot = FieldSnapshot(
+            id: FieldID(pid: 1, elementHash: 1),
+            app: AppIdentity(bundleID: "test", name: "Test", pid: 1),
+            textBefore: line.read,
+            textAfter: "",
+            caretRect: caret,
+            fieldFrame: field,
+            direction: direction
+        )
+        let sentence = direction == .leftToRight
+            ? " and then we will add it to the list at the start of the week so that we can share it with the rest of the team on the call."
+            : " ثم سنضيفه إلى القائمة في بداية الأسبوع حتى نتمكن من مشاركته مع بقية الفريق في الاجتماع القادم."
+        let suggestion = String(repeating: sentence, count: 4)
+        let overlay = GhostOverlay()
+        #expect(overlay.show(suggestion, for: snapshot, multiline: true))
+        defer { overlay.hide() }
+
+        let view = overlay.ghostView
+        let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+        let lineTop = GhostLayout.baseline(caret: caret, font: font) - font.baselineOffset
+        let textTop = lineTop - (lineTop - (font.lineHeight / 2).rounded(.up)).rounded(.down)
+        let pitch = max(caretHeight, font.lineHeight)
+        var continuationLines: [ClosedRange<CGFloat>] = []
+        for index in 1... {
+            let rows = Int((textTop + CGFloat(index) * pitch) * scale)..<Int((textTop + CGFloat(index + 1) * pitch) * scale)
+            guard rows.upperBound <= rep.pixelsHigh else { break }
+            let inked = (0..<rep.pixelsWide).filter { x in rows.contains { (rep.colorAt(x: x, y: $0)?.alphaComponent ?? 0) > 0.2 } }
+            guard let first = inked.first, let last = inked.last else { break }
+            continuationLines.append(field.minX + CGFloat(first) / scale...field.minX + CGFloat(last + 1) / scale)
+        }
+        #expect(continuationLines.count >= 3)
+        for ink in continuationLines {
+            if direction == .leftToRight {
+                #expect(abs(ink.lowerBound - field.minX) < 2)
+            } else {
+                #expect(abs(ink.upperBound - field.maxX) < 2)
+            }
+        }
+    }
 }
 
 @MainActor @Suite struct OverlayWindowServerTests {
