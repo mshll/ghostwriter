@@ -16,6 +16,13 @@ public final class FocusTracker {
             retarget(to: Self.appTarget(NSWorkspace.shared.frontmostApplication))
         }
     }
+    public var readsTerminalAgentPrompts = true {
+        didSet {
+            guard readsTerminalAgentPrompts != oldValue, isRunning else { return }
+            tearDownObservation()
+            retarget(to: Self.appTarget(NSWorkspace.shared.frontmostApplication))
+        }
+    }
 
     private struct Unfocused: Equatable {
         var app: AppIdentity?
@@ -94,7 +101,9 @@ public final class FocusTracker {
         noteActivity()
         guard let app = target ?? Self.appTarget(NSWorkspace.shared.frontmostApplication),
               !isExcluded(app) else { return nil }
-        let outcome = await worker.read(app, rule: rule(for: app.identity.bundleID))
+        let outcome = await worker.read(
+            app, rule: rule(for: app.identity.bundleID), readsTerminalAgentPrompts: readsTerminalAgentPrompts
+        )
         onDiagnostics?(outcome.diagnostics)
         guard case .field(let snapshot) = outcome.result, siteReason(snapshot) == nil else { return nil }
         return snapshot
@@ -209,7 +218,7 @@ public final class FocusTracker {
         readInFlight = true
         let rule = rule(for: app.identity.bundleID)
         Task {
-            let outcome = await worker.read(app, rule: rule)
+            let outcome = await worker.read(app, rule: rule, readsTerminalAgentPrompts: readsTerminalAgentPrompts)
             readInFlight = false
             apply(outcome, for: app)
             if rereadRequested {

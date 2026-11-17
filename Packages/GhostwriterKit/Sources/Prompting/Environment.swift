@@ -55,7 +55,7 @@ enum EnvironmentLines {
         case .chat: "I am writing a chat message."
         case .document: "I am writing a document."
         case .search: "I am typing a search query."
-        case .terminal: "I am typing in a terminal."
+        case .terminal: "I am writing a prompt for an AI agent in a terminal."
         case .code: "I am writing code."
         case .form: "I am filling in a form."
         case .aiPrompt: "I am writing a prompt for an AI assistant."
