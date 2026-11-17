@@ -22,6 +22,7 @@ struct AppsPane: View {
                         }
                         .pickerStyle(.menu)
                     }
+                    SettingRow(AppsSetting.terminalAgents, isOn: $preferences.terminalAgentPrompts)
                 }
 
                 if !pausedApps.isEmpty {
@@ -358,11 +359,12 @@ extension AppRule {
 }
 
 enum AppsSetting: SettingKey {
-    case scope, apps
+    case scope, terminalAgents, apps
 
     var text: SettingText {
         switch self {
         case .scope: SettingText("Show suggestions in", keywords: ["only", "allow", "allowlist", "choose", "all apps"])
+        case .terminalAgents: SettingText("Suggest in terminal coding agents", subtitle: "Works in Terminal.", keywords: ["terminal", "cli", "agent", "shell", "command line"])
         case .apps: SettingText("Apps", keywords: ["per-app", "exclude", "disable", "rules", "paste", "compatibility", "code editor", "paused", "resume"])
         }
     }

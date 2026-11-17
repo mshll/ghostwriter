@@ -111,6 +111,7 @@ final class CompletionCoordinator {
         listenForShortcuts()
         followFeatureShortcuts()
         followPracticeField()
+        followTerminalAgentPrompts()
         followActiveApp()
         followSuggestionSwitch()
         startMonitorsWhenTrusted()
@@ -157,6 +158,14 @@ final class CompletionCoordinator {
             tracker.includesOwnApp = appState.practiceFieldVisible
         } onChange: { [weak self] in
             Task { @MainActor in self?.followPracticeField() }
+        }
+    }
+
+    private func followTerminalAgentPrompts() {
+        withObservationTracking {
+            tracker.readsTerminalAgentPrompts = preferences.terminalAgentPrompts
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.followTerminalAgentPrompts() }
         }
     }
 
@@ -293,6 +302,7 @@ final class CompletionCoordinator {
                 && $0.selectedText == snapshot.selectedText
         } ?? false
         let selectionChanged = field?.selectedText != snapshot.selectedText
+        let startsDraft = field?.textBefore.isEmpty == true && !snapshot.textBefore.isEmpty
         field = snapshot
         if appState.isPaused(bundleID: snapshot.app.bundleID) {
             hideAll()
@@ -306,6 +316,9 @@ final class CompletionCoordinator {
         if titleChanged, let context, ContinuousClock.now - context.loadedAt > Self.contextReloadAge {
             // Recent contexts are kept: titles also change with edit markers right after focus.
             Self.log.info("Reloading context: the window title changed")
+            loadContext(for: snapshot)
+        } else if startsDraft, let transcript = snapshot.transcript, let context, context.transcript != transcript {
+            Self.log.info("Reloading context: new output above the prompt")
             loadContext(for: snapshot)
         }
         if let current = suggestion {
