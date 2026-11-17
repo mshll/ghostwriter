@@ -14,7 +14,7 @@ final class AppRuleLibrary {
 
     @ObservationIgnored private let store: MemoryStore?
     @ObservationIgnored private let preferences: Preferences
-    @ObservationIgnored private var rulesByBundleID: [String: AppRule] = [:]
+    private var rulesByBundleID: [String: AppRule] = [:]
 
     init(store: MemoryStore?, preferences: Preferences) {
         self.store = store
