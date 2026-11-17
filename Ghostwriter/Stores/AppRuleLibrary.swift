@@ -13,17 +13,26 @@ final class AppRuleLibrary {
     private(set) var lastError: String?
 
     @ObservationIgnored private let store: MemoryStore?
+    @ObservationIgnored private let preferences: Preferences
     @ObservationIgnored private var rulesByBundleID: [String: AppRule] = [:]
 
-    init(store: MemoryStore?) {
+    init(store: MemoryStore?, preferences: Preferences) {
         self.store = store
+        self.preferences = preferences
         reload()
     }
 
     func rule(for bundleID: String) -> AppRule? { rulesByBundleID[bundleID] }
 
     func effectiveRule(for bundleID: String) -> AppRule {
-        (BuiltInAppRules.rule(for: bundleID) ?? AppRule(bundleID: bundleID)).merged(with: rulesByBundleID[bundleID])
+        var rule = (BuiltInAppRules.rule(for: bundleID) ?? AppRule(bundleID: bundleID)).merged(with: rulesByBundleID[bundleID])
+        rule.completionsEnabled = rule.completionsEnabled ?? defaultCompletions(for: bundleID)
+        return rule
+    }
+
+    /// What "Show suggestions" falls back to when the user has not set it for the app.
+    func defaultCompletions(for bundleID: String) -> Bool {
+        BuiltInAppRules.rule(for: bundleID)?.completionsEnabled ?? (preferences.appScope == .allApps)
     }
 
     func isRecordingAllowed(for bundleID: String) -> Bool {
@@ -62,7 +71,7 @@ final class AppRuleLibrary {
     }
 
     func setCompletions(_ enabled: Bool, for bundleID: String) {
-        update(bundleID, \.completionsEnabled, to: enabled)
+        update(bundleID, \.completionsEnabled, to: enabled, fallback: defaultCompletions(for: bundleID))
     }
 
     func setTabAccept(_ enabled: Bool, for bundleID: String) {
@@ -95,9 +104,9 @@ final class AppRuleLibrary {
         return changed
     }
 
-    private func update(_ bundleID: String, _ field: WritableKeyPath<AppRule, Bool?>, to enabled: Bool) {
+    private func update(_ bundleID: String, _ field: WritableKeyPath<AppRule, Bool?>, to enabled: Bool, fallback: Bool? = nil) {
         var rule = rulesByBundleID[bundleID] ?? AppRule(bundleID: bundleID)
-        let fallback = BuiltInAppRules.rule(for: bundleID)?[keyPath: field] ?? true
+        let fallback = fallback ?? BuiltInAppRules.rule(for: bundleID)?[keyPath: field] ?? true
         rule[keyPath: field] = enabled == fallback ? nil : enabled
         if rule == AppRule(bundleID: bundleID) {
             if rulesByBundleID[bundleID] != nil { delete(bundleID: bundleID) }

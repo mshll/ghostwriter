@@ -21,6 +21,19 @@ enum EscapeBehavior: String, CaseIterable, Identifiable {
     }
 }
 
+enum AppScope: String, CaseIterable, Identifiable {
+    case allApps, chosenApps
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .allApps: "All apps"
+        case .chosenApps: "Only apps I choose"
+        }
+    }
+}
+
 /// User settings, persisted in `UserDefaults` under `ghostwriter.<propertyName>`.
 @Observable
 final class Preferences {
@@ -40,6 +53,11 @@ final class Preferences {
     var completionsEnabled: Bool {
         get { value(\.completionsEnabled, default: true) }
         set { setValue(newValue, \.completionsEnabled) }
+    }
+
+    var appScope: AppScope {
+        get { value(\.appScope, default: .allApps) }
+        set { setValue(newValue, \.appScope) }
     }
 
     var completionLength: CompletionLength {
@@ -363,6 +381,7 @@ extension PreferenceValue where Self: RawRepresentable, RawValue: PreferenceValu
 
 extension CompletionLength: PreferenceValue {}
 extension EscapeBehavior: PreferenceValue {}
+extension AppScope: PreferenceValue {}
 extension SettingsPane: PreferenceValue {}
 extension OnboardingStep: PreferenceValue {}
 

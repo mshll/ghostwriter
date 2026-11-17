@@ -7,12 +7,23 @@ import UniformTypeIdentifiers
 struct AppsPane: View {
     @Environment(AppRuleLibrary.self) private var library
     @Environment(AppState.self) private var appState
+    @Environment(Preferences.self) private var preferences
     @Environment(SettingsNavigation.self) private var navigation
     @State private var path: [String] = []
 
     var body: some View {
+        @Bindable var preferences = preferences
         NavigationStack(path: $path) {
             SettingsPaneView(pane: .apps) {
+                Section {
+                    SettingRow(AppsSetting.scope) {
+                        Picker("Show suggestions in", selection: $preferences.appScope) {
+                            ForEach(AppScope.allCases) { Text($0.title).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
+
                 if !pausedApps.isEmpty {
                     Section {
                         ForEach(pausedApps, id: \.self) { bundleID in
@@ -25,7 +36,9 @@ struct AppsPane: View {
 
                 Section {
                     if library.rules.isEmpty {
-                        Text("No apps yet. Add one to change how Ghostwriter behaves in it.")
+                        Text(preferences.appScope == .allApps
+                             ? "No apps yet. Add one to change how Ghostwriter behaves in it."
+                             : "No apps yet. Add the apps where you want suggestions.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(library.rules) { rule in
@@ -67,7 +80,7 @@ struct AppsPane: View {
 
     private func add(_ bundleID: String) {
         if library.rule(for: bundleID) == nil {
-            library.save(AppRule(bundleID: bundleID))
+            library.save(AppRule(bundleID: bundleID, completionsEnabled: preferences.appScope == .chosenApps ? true : nil))
         }
         path = [bundleID]
     }
@@ -122,7 +135,10 @@ private struct AppRow: View {
 
     private var summary: String {
         if rule.completionsEnabled == false { return "Suggestions off" }
-        if rule != AppRule(bundleID: rule.bundleID) { return "Changed settings" }
+        var otherSettings = rule
+        otherSettings.completionsEnabled = nil
+        if otherSettings != AppRule(bundleID: rule.bundleID) { return "Changed settings" }
+        if rule.completionsEnabled == true { return "Suggestions on" }
         return BuiltInAppRules.rule(for: rule.bundleID) != nil ? "Built-in adjustments" : "No changes yet"
     }
 }
@@ -180,7 +196,7 @@ private struct AppRuleEditor: View {
             AppIconTile(image: AppInfo.icon(for: draft.bundleID), size: SettingsPaneIcon.compactSize)
         } content: {
             Section {
-                RuleChoice("Show suggestions", value: $draft.completionsEnabled, fallback: builtIn?.completionsEnabled ?? true)
+                RuleChoice("Show suggestions", value: $draft.completionsEnabled, fallback: library.defaultCompletions(for: draft.bundleID))
                 RuleChoice("Complete inside existing text", value: $draft.midLineEnabled,
                            fallback: builtIn?.midLineEnabled ?? preferences.midLineEnabled)
                 RuleChoice("Accept with Tab", value: $draft.tabAcceptEnabled,
@@ -342,10 +358,11 @@ extension AppRule {
 }
 
 enum AppsSetting: SettingKey {
-    case apps
+    case scope, apps
 
     var text: SettingText {
         switch self {
+        case .scope: SettingText("Show suggestions in", keywords: ["only", "allow", "allowlist", "choose", "all apps"])
         case .apps: SettingText("Apps", keywords: ["per-app", "exclude", "disable", "rules", "paste", "compatibility", "code editor", "paused", "resume"])
         }
     }
