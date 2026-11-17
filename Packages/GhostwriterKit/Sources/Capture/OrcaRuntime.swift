@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import GWCore
 import os
+import Synchronization
 
 /// Reads the active terminal of a running Orca app through the local socket its `orca` command-line tool uses.
 /// Orca reports the text typed into a coding agent's prompt as the terminal's draft. It reports no draft at a shell
@@ -17,11 +18,50 @@ enum OrcaRuntime {
     private static let timeout = timeval(tv_sec: 0, tv_usec: 150_000)
     private static let responseLimit = 1 << 20
 
+    /// Remembers each terminal's draft between reads to tell which terminal the user types in: only the focused
+    /// terminal's draft changes with a keystroke, while drafts left in other terminals stay as they were.
+    struct TypingTracker {
+        private var drafts: [String: String] = [:]
+        private(set) var focused: String?
+
+        /// `drafts` maps every listed terminal to its draft, empty when it has none.
+        mutating func update(_ drafts: [String: String]) -> String? {
+            // The first read has nothing to compare with: every draft would look new.
+            let changed = self.drafts.isEmpty ? [:] : drafts.filter { self.drafts[$0.key, default: ""] != $0.value }
+            if changed.count == 1 { focused = changed.first?.key }
+            if let focused, drafts[focused] == nil { self.focused = nil }
+            self.drafts = drafts
+            return focused
+        }
+    }
+
+    static let listLimit = 50
+    private static let tracker = Mutex(TypingTracker())
+
+    /// `terminal.resolveActive` returns the active pane of the first tab Orca knows, not the focused one, so it is
+    /// only asked until a keystroke shows which terminal the user types in.
     static func activeTerminal(pid: pid_t) -> Terminal? {
         guard let runtime = runtime(pid: pid) else { return nil }
+        if let typing = typingTerminal(runtime) { return typing }
         guard let handle = call(runtime, ResolveActive.self, method: "terminal.resolveActive", params: [:])?.handle else {
             return nil
         }
+        return read(runtime, handle: handle)
+    }
+
+    private static func typingTerminal(_ runtime: Runtime) -> Terminal? {
+        guard let listed = call(runtime, List.self, method: "terminal.list", params: ["limit": listLimit])?.terminals else {
+            return nil
+        }
+        var terminals: [String: Terminal] = [:]
+        for terminal in listed {
+            terminals[terminal.handle] = read(runtime, handle: terminal.handle)
+        }
+        let focused = tracker.withLock { $0.update(terminals.compactMapValues { $0.draft ?? "" }) }
+        return focused.flatMap { terminals[$0] }
+    }
+
+    private static func read(_ runtime: Runtime, handle: String) -> Terminal? {
         let read = call(runtime, Read.self, method: "terminal.read", params: ["terminal": handle, "screen": true])
         guard let terminal = read?.terminal else { return nil }
         return Terminal(draft: terminal.draft, screen: terminal.tail ?? [])
@@ -52,6 +92,14 @@ enum OrcaRuntime {
 
     private struct ResolveActive: Decodable {
         var handle: String?
+    }
+
+    private struct List: Decodable {
+        struct Listed: Decodable {
+            var handle: String
+        }
+
+        var terminals: [Listed]
     }
 
     private struct Read: Decodable {
