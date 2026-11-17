@@ -17,7 +17,7 @@ enum Diagnostics {
             New context without room to stage: \(services.engine.inPlaceStagingCount) since launch
             Accessibility: \(onOff(appState.accessibilityGranted)), Screen Recording: \(onOff(appState.screenRecordingGranted)), \
             Paste from other apps: \(onOff(appState.clipboardAccessAllowed)), macOS inline predictions: \(onOff(appState.macOSPredictionsEnabled))
-            Suggestions: \(onOff(preferences.completionsEnabled)), length \(preferences.completionLength.title), \
+            Suggestions: \(onOff(preferences.completionsEnabled)) in \(preferences.appScope.title.lowercased()), length \(preferences.completionLength.title), \
             inside text \(onOff(preferences.midLineEnabled)), drafts \(onOff(preferences.draftEnabled)), \
             typo fixes \(onOff(preferences.typoFixesEnabled)), auto-fix \(onOff(preferences.autoFixTypos)), sentence check \(onOff(preferences.sentenceTypoCheck)), emoji \(onOff(preferences.emojiEnabled))
             Context: window text \(onOff(preferences.screenContextEnabled)), screenshots \(onOff(preferences.ocrEnabled)), \

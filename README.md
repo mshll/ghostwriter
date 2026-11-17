@@ -27,7 +27,7 @@ Press Tab. That's the interface. Tab takes the next word, and the key above Tab 
 - **Actions for selected text.** Rephrase, fix grammar, shorten, change the tone, translate or find synonyms, with Apple Intelligence on this Mac.
 - **Proofread with one shortcut.** Fixes spelling, grammar and punctuation in the selection, or in the paragraph before the cursor, and keeps your wording. Press the shortcut again to undo.
 - **Snippets.** Short triggers for long text: type `;addr` to insert your address. Placeholders: `{date}`, `{time}`, `{clipboard}`, `{cursor}` and `{ai: instruction}`.
-- **Your rules for each app.** Turn suggestions off, stop recording, change the insertion method or add instructions for one app.
+- **Your rules for each app.** Run in every app or only in the apps you choose. Turn suggestions off, stop recording, change the insertion method or add instructions for one app.
 - **Typo fixes.** A misspelled word is struck through with the fix next to it: Tab applies it, Esc keeps your word. Names and words you write often are left alone. Optionally, obvious typos are fixed as you type, and Delete right after undoes the fix.
 - **Emoji.** Type `:smile` to pick an emoji.
 - **Coming from Cotypist?** Import your recorded writing, instructions and per-app settings during setup or from Settings > Personalization. macOS asks you to allow access to Cotypist's data once.

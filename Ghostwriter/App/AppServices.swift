@@ -28,7 +28,7 @@ final class AppServices {
         self.memory = memory
         self.downloader = downloader
         models = ModelLibrary(preferences: preferences, appState: appState, downloader: downloader)
-        appRules = AppRuleLibrary(store: memory)
+        appRules = AppRuleLibrary(store: memory, preferences: preferences)
         snippets = SnippetLibrary(store: memory)
         cotypist = CotypistImporter(preferences: preferences, memory: memory, appRules: appRules)
         updateReminder = UpdateReminder(appState: appState)

@@ -30,6 +30,7 @@ public enum BuiltInAppRules {
         }
         add(AppCatalog.passwordManagers) { AppRule(bundleID: $0, completionsEnabled: false, recordWriting: false) }
         add(AppCatalog.completionsOff) { AppRule(bundleID: $0, completionsEnabled: false) }
+        add(AppCatalog.terminals) { AppRule(bundleID: $0, completionsEnabled: false) }
         add(AppCatalog.codeEditors) { AppRule(bundleID: $0, codeEditorCompletions: false) }
         add(AppCatalog.vsCodeForks) { AppRule(bundleID: $0, codeEditorCompletions: false) }
         add(AppCatalog.needsEnhancedUserInterface) { AppRule(bundleID: $0, needsEnhancedUserInterface: true) }
