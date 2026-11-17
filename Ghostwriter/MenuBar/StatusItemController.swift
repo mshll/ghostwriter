@@ -13,7 +13,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private struct IconState: Equatable, Sendable {
         var visible: Bool
-        var dimmed: Bool
+        var offEverywhere: Bool
+        var offInApp: String?
         var attention: Bool
         var count: Int?
     }
@@ -49,11 +50,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func observeIconState() {
-        iconTask = Task { [weak self, preferences, appState] in
+        iconTask = Task { [weak self, preferences, appState, appRules = services.appRules] in
+            let switcher = SuggestionSwitch(preferences: preferences, appState: appState, appRules: appRules)
             let states = Observations {
-                IconState(
+                let front = appState.frontmostApp.flatMap { $0.bundleID == Bundle.main.bundleIdentifier ? nil : $0 }
+                return IconState(
                     visible: preferences.showsMenuBarIcon,
-                    dimmed: appState.isGloballyPaused || !preferences.completionsEnabled,
+                    offEverywhere: !switcher.isOnEverywhere,
+                    offInApp: front.flatMap { switcher.isOn(in: $0.bundleID) ? nil : $0.name },
                     attention: appState.needsAttention,
                     count: preferences.showWordCountInMenuBar && appState.wordsToday > 0 ? appState.wordsToday : nil
                 )
@@ -67,14 +71,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func applyIcon(_ state: IconState) {
         statusItem.isVisible = state.visible
         guard let button = statusItem.button else { return }
-        button.image = Self.icon(attention: state.attention, count: state.count)
-        button.appearsDisabled = state.dimmed
-        button.toolTip = state.dimmed ? "Ghostwriter is paused" : "Ghostwriter"
+        button.image = Self.icon(off: state.offEverywhere, attention: state.attention, count: state.count)
+        button.appearsDisabled = !state.offEverywhere && state.offInApp != nil
+        button.toolTip = if state.offEverywhere {
+            "Ghostwriter is paused"
+        } else if let app = state.offInApp {
+            "Ghostwriter is off in \(app)"
+        } else {
+            "Ghostwriter"
+        }
     }
 
-    private static func icon(attention: Bool, count: Int?) -> NSImage? {
+    private static func icon(off: Bool, attention: Bool, count: Int?) -> NSImage? {
         let glyph: NSImage
-        if let count {
+        if off {
+            guard let asset = NSImage(named: "MenuBarIconOff") else {
+                log.error("MenuBarIconOff asset is missing")
+                return nil
+            }
+            glyph = slashed(asset)
+        } else if let count {
             glyph = CountGlyph.image(text: countText(count))
             glyph.accessibilityDescription = "Ghostwriter, \(count.formatted()) words saved today"
         } else if let asset = NSImage(named: "MenuBarIcon") {
@@ -85,6 +101,31 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             return nil
         }
         guard attention else { return glyph }
+        return badged(glyph)
+    }
+
+    private static func slashed(_ glyph: NSImage) -> NSImage {
+        let image = NSImage(size: glyph.size, flipped: false) { rect in
+            glyph.draw(in: rect)
+            let slash = NSBezierPath()
+            slash.move(to: NSPoint(x: rect.minX + rect.width * 0.054, y: rect.maxY - rect.height * 0.069))
+            slash.line(to: NSPoint(x: rect.minX + rect.width * 0.946, y: rect.minY + rect.height * 0.069))
+            slash.lineCapStyle = .round
+            NSGraphicsContext.current?.compositingOperation = .destinationOut
+            slash.lineWidth = 3
+            slash.stroke()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            NSColor.black.setStroke()
+            slash.lineWidth = 1.25
+            slash.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Ghostwriter, paused"
+        return image
+    }
+
+    private static func badged(_ glyph: NSImage) -> NSImage {
         let badged = NSImage(size: glyph.size, flipped: false) { rect in
             glyph.draw(in: rect)
             let dot = NSRect(x: rect.maxX - 5, y: rect.maxY - 5, width: 5, height: 5)
