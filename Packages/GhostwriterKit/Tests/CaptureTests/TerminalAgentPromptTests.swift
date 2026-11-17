@@ -37,6 +37,12 @@ import Testing
         #expect(prompt.draftStart == cursor)
     }
 
+    @Test func noBreakSpaceAfterThePromptGlyph() throws {
+        let screen = Self.screen(["❯\u{00A0}Fix the failing test in the parser"])
+        let prompt = try #require(TerminalAgentPrompt.find(in: screen, cursor: nil))
+        #expect(prompt.textBefore == "Fix the failing test in the parser")
+    }
+
     @Test func oneLineDraftDropsTheDrawnCaretCell() throws {
         let screen = Self.screen(["❯ Refactor the settings pane "])
         let prompt = try #require(TerminalAgentPrompt.find(in: screen, cursor: Self.belowBox(screen)))

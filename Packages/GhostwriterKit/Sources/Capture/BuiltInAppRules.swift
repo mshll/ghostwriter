@@ -153,7 +153,7 @@ enum AppCatalog {
     ]
 
     static let singleCharacterInsertion: Set<String> = [
-        "com.finaldraft.finaldraft.v12", "com.finaldraft.finaldraft.v13", "com.freron.MailMate",
+        "com.finaldraft.finaldraft.v12", "com.finaldraft.finaldraft.v13", "com.freron.MailMate", AppCatalog.orca,
     ]
 
     static let ignoresSizeThresholds: Set<String> = ["com.apple.MobileSMS"]

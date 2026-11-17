@@ -157,7 +157,7 @@ struct TerminalAgentPrompt: Equatable {
         index = text.index(after: index)
         column += 1
         if index == text.endIndex, !boxed { return Prefix(indent: indent, boxed: false, contentColumn: column) }
-        guard index < text.endIndex, text[index] == " " else { return nil }
+        guard index < text.endIndex, text[index] == " " || text[index] == "\u{00A0}" else { return nil }
         return Prefix(indent: indent, boxed: boxed, contentColumn: column + 1)
     }
 

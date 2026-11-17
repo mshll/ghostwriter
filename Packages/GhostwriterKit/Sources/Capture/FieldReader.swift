@@ -310,18 +310,21 @@ struct FieldReader {
         let left = (screenFrame?.minX).map { $0 + 2 * cell.width } ?? caret.minX
         let right = max(screenFrame?.maxX ?? caret.maxX, caret.maxX)
         let screen = terminal.screen.joined(separator: "\n")
-        let transcript = TerminalAgentPrompt.find(in: screen, cursor: nil)?.transcript ?? screen
+        let prompt = TerminalAgentPrompt.find(in: screen, cursor: nil)
+        guard terminal.draft != nil || prompt != nil else { return .ineligible(.terminalShell) }
+        let draft = terminal.draft ?? ""
+        let transcript = prompt?.transcript ?? screen
 
         return .field(FieldSnapshot(
             id: FieldID(pid: app.identity.pid, elementHash: element.cfHash),
             app: app.identity,
-            textBefore: terminal.draft,
+            textBefore: draft,
             textAfter: "",
             caretRect: caret,
             fieldFrame: CGRect(x: min(left, caret.minX), y: caret.minY, width: right - min(left, caret.minX), height: caret.height),
             style: FieldStyle(fontName: Self.terminalFont),
             kind: .terminal,
-            direction: FieldClassifier.direction(before: terminal.draft, after: ""),
+            direction: FieldClassifier.direction(before: draft, after: ""),
             windowTitle: context.windowTitle,
             transcript: transcript
         ))

@@ -4,10 +4,11 @@ import GWCore
 import os
 
 /// Reads the active terminal of a running Orca app through the local socket its `orca` command-line tool uses.
-/// Orca reports the text typed into a coding agent's prompt as the terminal's draft, and no draft at a shell prompt.
+/// Orca reports the text typed into a coding agent's prompt as the terminal's draft. It reports no draft at a shell
+/// prompt, and none for an empty agent prompt either.
 enum OrcaRuntime {
     struct Terminal: Equatable {
-        var draft: String
+        var draft: String?
         var screen: [String]
     }
 
@@ -22,8 +23,8 @@ enum OrcaRuntime {
             return nil
         }
         let read = call(runtime, Read.self, method: "terminal.read", params: ["terminal": handle, "screen": true])
-        guard let terminal = read?.terminal, let draft = terminal.draft else { return nil }
-        return Terminal(draft: draft, screen: terminal.tail ?? [])
+        guard let terminal = read?.terminal else { return nil }
+        return Terminal(draft: terminal.draft, screen: terminal.tail ?? [])
     }
 
     // MARK: Protocol
