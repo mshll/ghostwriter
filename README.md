@@ -19,7 +19,7 @@ Press Tab. That's the interface. Tab takes the next word, and the key above Tab 
 
 ## Features
 
-- **Suggestions everywhere.** Mail, Messages, Notes, Slack, browsers, code editors: any text field that macOS can read. Also in the middle of a line, and in the prompt of a coding agent running in Terminal.
+- **Suggestions everywhere.** Mail, Messages, Notes, Slack, browsers, code editors: any text field that macOS can read. Also in the middle of a line, and in the prompt of a coding agent running in Terminal or Orca.
 - **Fluent in yours, right to left too.** The default model writes English, Arabic, French, German, Spanish, Japanese, Chinese and more.
 - **It sounds like you, app by app.** Ghostwriter stores what you write on this Mac and uses it to match your words and tone. You can add instructions about yourself, and different instructions for each app.
 - **Reads the context.** It can use the text near your cursor, such as the message you reply to, and text you copied recently.

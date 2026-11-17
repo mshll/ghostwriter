@@ -364,7 +364,7 @@ enum AppsSetting: SettingKey {
     var text: SettingText {
         switch self {
         case .scope: SettingText("Show suggestions in", keywords: ["only", "allow", "allowlist", "choose", "all apps"])
-        case .terminalAgents: SettingText("Suggest in terminal coding agents", subtitle: "Works in Terminal.", keywords: ["terminal", "cli", "agent", "shell", "command line"])
+        case .terminalAgents: SettingText("Suggest in terminal coding agents", subtitle: "Works in Terminal and Orca.", keywords: ["terminal", "cli", "agent", "shell", "command line"])
         case .apps: SettingText("Apps", keywords: ["per-app", "exclude", "disable", "rules", "paste", "compatibility", "code editor", "paused", "resume"])
         }
     }

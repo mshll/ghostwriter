@@ -102,6 +102,8 @@ enum AppCatalog {
     /// Terminals whose screen text and character bounds are readable, so a coding agent's input box can be found.
     static let agentPromptTerminals: Set<String> = ["com.apple.Terminal"]
 
+    static let orca = "com.stablyai.orca"
+
     static let vsCodeForks: Set<String> = [
         "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",
         "com.exafunction.windsurf", "com.vscodium", "com.stablyai.orca",

@@ -122,8 +122,11 @@ struct FieldReader {
 
         var isAgentComposer = false
         var isCodeEditor = AppCatalog.isCodeEditor(bundleID)
-        if AppCatalog.vsCodeForks.contains(bundleID) {
-            if domClasses.contains("xterm-helper-textarea") { return rejected(.terminalShell) }
+        let isRuntimeTerminal = domClasses.contains("xterm-helper-textarea")
+        if isRuntimeTerminal {
+            guard readsTerminalAgentPrompts, bundleID == AppCatalog.orca else { return rejected(.terminalShell) }
+            isCodeEditor = false
+        } else if AppCatalog.vsCodeForks.contains(bundleID) {
             isAgentComposer = !Self.agentComposerClasses.isDisjoint(with: domClasses)
                 || ancestry.domTokens.contains { token in Self.agentPanelTokens.contains { token.contains($0) } }
                 || !Self.agentPanelDescriptions.isDisjoint(with: ancestry.descriptions)
@@ -155,7 +158,7 @@ struct FieldReader {
             domIdentifier: domIdentifier,
             host: webArea == nil ? nil : context.url?.host().map(DomainPattern.normalize),
             isWeb: webArea != nil,
-            isTerminal: isTerminal,
+            isTerminal: isTerminal || isRuntimeTerminal,
             isCodeEditor: isCodeEditor,
             isAgentComposer: isAgentComposer
         ))
@@ -184,7 +187,11 @@ struct FieldReader {
     // MARK: Read
 
     func read(_ context: FieldContext, diagnostics: inout ReadDiagnostics) throws(AXFailure) -> ReadResult {
-        if context.kind == .terminal { return try readTerminalPrompt(context, diagnostics: &diagnostics) }
+        if context.kind == .terminal {
+            return app.identity.bundleID == AppCatalog.orca
+                ? try readOrcaPrompt(context)
+                : try readTerminalPrompt(context, diagnostics: &diagnostics)
+        }
         let element = context.element
         let attributes = try element.values([
             kAXSelectedTextRangeAttribute, kAXNumberOfCharactersAttribute, kAXPositionAttribute, kAXSizeAttribute,
@@ -286,6 +293,37 @@ struct FieldReader {
             direction: FieldClassifier.direction(before: prompt.textBefore, after: prompt.textAfter),
             windowTitle: context.windowTitle,
             transcript: prompt.transcript
+        ))
+    }
+
+    /// Orca draws its terminal on a canvas, so the text comes from Orca itself. xterm.js keeps its hidden input at the
+    /// terminal cursor, one cell in size, which gives the caret and the cell size.
+    private func readOrcaPrompt(_ context: FieldContext) throws(AXFailure) -> ReadResult {
+        let element = context.element
+        guard let cell = Self.frame(try element.values([kAXPositionAttribute, kAXSizeAttribute])) else {
+            return .ineligible(.unreadable)
+        }
+        guard let terminal = OrcaRuntime.activeTerminal(pid: app.identity.pid) else { return .ineligible(.terminalShell) }
+        let screenFrame = try element.element(kAXParentAttribute)?.element(kAXParentAttribute)
+            .flatMap { screen throws(AXFailure) in Self.frame(try screen.values([kAXPositionAttribute, kAXSizeAttribute])) }
+        let caret = CGRect(x: cell.minX, y: cell.minY, width: 1, height: cell.height)
+        let left = (screenFrame?.minX).map { $0 + 2 * cell.width } ?? caret.minX
+        let right = max(screenFrame?.maxX ?? caret.maxX, caret.maxX)
+        let screen = terminal.screen.joined(separator: "\n")
+        let transcript = TerminalAgentPrompt.find(in: screen, cursor: nil)?.transcript ?? screen
+
+        return .field(FieldSnapshot(
+            id: FieldID(pid: app.identity.pid, elementHash: element.cfHash),
+            app: app.identity,
+            textBefore: terminal.draft,
+            textAfter: "",
+            caretRect: caret,
+            fieldFrame: CGRect(x: min(left, caret.minX), y: caret.minY, width: right - min(left, caret.minX), height: caret.height),
+            style: FieldStyle(fontName: Self.terminalFont),
+            kind: .terminal,
+            direction: FieldClassifier.direction(before: terminal.draft, after: ""),
+            windowTitle: context.windowTitle,
+            transcript: transcript
         ))
     }
 
