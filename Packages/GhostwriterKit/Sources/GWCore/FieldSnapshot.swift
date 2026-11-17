@@ -71,6 +71,8 @@ public struct FieldSnapshot: Sendable, Hashable {
     public var windowTitle: String?
     public var url: URL?
     public var language: String?
+    /// Text the app shows above the field, read along with it: a terminal coding agent's output above its input box.
+    public var transcript: String?
 
     public init(
         id: FieldID,
@@ -87,6 +89,7 @@ public struct FieldSnapshot: Sendable, Hashable {
         windowTitle: String? = nil,
         url: URL? = nil,
         language: String? = nil,
+        transcript: String? = nil,
         caretIsEstimated: Bool = false
     ) {
         self.id = id
@@ -103,6 +106,7 @@ public struct FieldSnapshot: Sendable, Hashable {
         self.windowTitle = windowTitle
         self.url = url
         self.language = language
+        self.transcript = transcript
         self.caretIsEstimated = caretIsEstimated
     }
 

@@ -60,6 +60,11 @@ final class Preferences {
         set { setValue(newValue, \.appScope) }
     }
 
+    var terminalAgentPrompts: Bool {
+        get { value(\.terminalAgentPrompts, default: true) }
+        set { setValue(newValue, \.terminalAgentPrompts) }
+    }
+
     var completionLength: CompletionLength {
         get { value(\.completionLength, default: .medium) }
         set { setValue(newValue, \.completionLength) }

@@ -13,6 +13,8 @@ struct SessionContext: Sendable {
     /// The title when the context was read. The prompt uses it instead of the live title, which changes
     /// with edit markers and unread counts and would invalidate the decoded prompt.
     var windowTitle: String?
+    /// The field's transcript when the context was read, to tell when a terminal agent has answered since.
+    var transcript: String?
     var loadedAt = ContinuousClock.now
     var keepsDate = false
     var beforeAnchor: String?
@@ -46,18 +48,26 @@ struct ContextRequest {
     func load(memory: MemoryStore?, screen: ScreenContextProvider) async -> SessionContext {
         let snapshot = snapshot
         let options = screenOptions
-        async let screenText: String? = includeScreen ? screen.text(for: snapshot, options: options) : nil
+        async let screenText: String? = includeScreen ? Self.screenText(for: snapshot, options: options, screen: screen) : nil
         let examples = await Self.examples(for: snapshot, limit: exampleLimit, excluding: sessionKey, memory: memory)
         return SessionContext(
             examples: examples,
             screenText: await screenText,
             clipboard: clipboard,
-            windowTitle: snapshot.windowTitle
+            windowTitle: snapshot.windowTitle,
+            transcript: snapshot.transcript
         )
     }
 
+    private static func screenText(
+        for snapshot: FieldSnapshot, options: ScreenContextOptions, screen: ScreenContextProvider
+    ) async -> String? {
+        guard let transcript = snapshot.transcript else { return await screen.text(for: snapshot, options: options) }
+        return transcript.isEmpty ? nil : String(transcript.suffix(options.maxCharacters))
+    }
+
     func screenTextAfterOCR(screen: ScreenContextProvider) async -> String? {
-        guard includeScreen, screenOptions.allowOCR else { return nil }
+        guard includeScreen, screenOptions.allowOCR, snapshot.transcript == nil else { return nil }
         return await screen.textAfterOCR(for: snapshot, options: screenOptions)
     }
 

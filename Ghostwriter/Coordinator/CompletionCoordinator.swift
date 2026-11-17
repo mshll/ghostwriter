@@ -68,6 +68,7 @@ final class CompletionCoordinator {
     private var typedTail = ""
     private var typedSinceRead = ""
     private var editedSinceRead = false
+    private var terminalSpaces: (visible: String, spaces: String)?
     private var deleteSettle: Task<Void, Never>?
     private var charactersSinceExamples = 0
     private var acceptWatchdog: Task<Void, Never>?
@@ -111,6 +112,7 @@ final class CompletionCoordinator {
         listenForShortcuts()
         followFeatureShortcuts()
         followPracticeField()
+        followTerminalAgentPrompts()
         followActiveApp()
         followSuggestionSwitch()
         startMonitorsWhenTrusted()
@@ -157,6 +159,14 @@ final class CompletionCoordinator {
             tracker.includesOwnApp = appState.practiceFieldVisible
         } onChange: { [weak self] in
             Task { @MainActor in self?.followPracticeField() }
+        }
+    }
+
+    private func followTerminalAgentPrompts() {
+        withObservationTracking {
+            tracker.readsTerminalAgentPrompts = preferences.terminalAgentPrompts
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.followTerminalAgentPrompts() }
         }
     }
 
@@ -278,10 +288,15 @@ final class CompletionCoordinator {
         typedTail = ""
         typedSinceRead = ""
         editedSinceRead = false
+        terminalSpaces = nil
     }
 
-    private func textChanged(_ snapshot: FieldSnapshot) {
-        guard snapshot != field else { return }
+    private func textChanged(_ read: FieldSnapshot) {
+        let snapshot = read.kind == .terminal ? withTypedSpaces(read) : read
+        guard snapshot != field else {
+            rereadLaggingTerminal(snapshot)
+            return
+        }
         settleTyped(against: snapshot)
         // The read does not show everything typed or inserted yet (apps report late, long accepts go in chunks).
         // The suggestion already follows that text and the engine has it or gets it from the next read, so a
@@ -293,6 +308,7 @@ final class CompletionCoordinator {
                 && $0.selectedText == snapshot.selectedText
         } ?? false
         let selectionChanged = field?.selectedText != snapshot.selectedText
+        let startsDraft = field?.textBefore.isEmpty == true && !snapshot.textBefore.isEmpty
         field = snapshot
         if appState.isPaused(bundleID: snapshot.app.bundleID) {
             hideAll()
@@ -307,10 +323,16 @@ final class CompletionCoordinator {
             // Recent contexts are kept: titles also change with edit markers right after focus.
             Self.log.info("Reloading context: the window title changed")
             loadContext(for: snapshot)
+        } else if startsDraft, let transcript = snapshot.transcript, let context, context.transcript != transcript {
+            Self.log.info("Reloading context: new output above the prompt")
+            loadContext(for: snapshot)
         }
         if let current = suggestion {
             if snapshot.selectedText.isEmpty, var next = current.advanced(to: snapshot.textBefore + typedSinceRead) {
-                guard !lagging else { return }
+                guard !lagging else {
+                    rereadLaggingTerminal(snapshot)
+                    return
+                }
                 if let later = deferred?.advanced(to: snapshot.textBefore),
                    ShownSuggestion.normalized(later.text).hasPrefix(ShownSuggestion.normalized(next.text)) {
                     next = later
@@ -326,7 +348,10 @@ final class CompletionCoordinator {
             }
             hideSuggestion()
         }
-        guard !lagging else { return }
+        guard !lagging else {
+            rereadLaggingTerminal(snapshot)
+            return
+        }
         guard isTyping else {
             // A read that only moves the caret rect, style or title keeps the request for this text, such as one
             // asked for on demand.
@@ -341,6 +366,31 @@ final class CompletionCoordinator {
         }
         refreshExamplesIfNeeded(for: snapshot)
         requestCompletion(for: snapshot)
+    }
+
+    /// A terminal shows no spaces after the last character, so spaces typed at the end of a draft are added back
+    /// while the terminal still shows the same text.
+    private func withTypedSpaces(_ read: FieldSnapshot) -> FieldSnapshot {
+        var snapshot = read
+        if let terminalSpaces, terminalSpaces.visible == read.textBefore {
+            snapshot.textBefore += terminalSpaces.spaces
+        } else {
+            terminalSpaces = nil
+        }
+        guard !editedSinceRead, let field, field.id == read.id,
+              let appended = TextContinuation.appended(from: field.textBefore, to: snapshot.textBefore),
+              typedSinceRead.hasPrefix(appended) else { return snapshot }
+        let rest = typedSinceRead.dropFirst(appended.count)
+        guard !rest.isEmpty, rest.allSatisfy({ $0 == " " }) else { return snapshot }
+        terminalSpaces = (read.textBefore, (terminalSpaces?.spaces ?? "") + rest)
+        snapshot.textBefore += rest
+        return snapshot
+    }
+
+    /// Terminals report no text changes, and their text follows a keystroke a few frames late.
+    private func rereadLaggingTerminal(_ snapshot: FieldSnapshot) {
+        guard snapshot.kind == .terminal, !typedSinceRead.isEmpty, isTyping else { return }
+        scheduleRefresh(after: .milliseconds(30))
     }
 
     private func settleTyped(against snapshot: FieldSnapshot) {
@@ -389,6 +439,7 @@ final class CompletionCoordinator {
         case .deleteBackward, .deleteForward:
             lastTyping = .now
             editedSinceRead = true
+            terminalSpaces = nil
             typedTail = String(typedTail.dropLast())
             hideSuggestion()
             if let current = emoji, !current.query.isEmpty {

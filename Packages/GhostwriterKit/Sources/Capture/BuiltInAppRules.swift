@@ -30,7 +30,7 @@ public enum BuiltInAppRules {
         }
         add(AppCatalog.passwordManagers) { AppRule(bundleID: $0, completionsEnabled: false, recordWriting: false) }
         add(AppCatalog.completionsOff) { AppRule(bundleID: $0, completionsEnabled: false) }
-        add(AppCatalog.terminals) { AppRule(bundleID: $0, completionsEnabled: false) }
+        add(AppCatalog.terminals.subtracting(AppCatalog.agentPromptTerminals)) { AppRule(bundleID: $0, completionsEnabled: false) }
         add(AppCatalog.codeEditors) { AppRule(bundleID: $0, codeEditorCompletions: false) }
         add(AppCatalog.vsCodeForks) { AppRule(bundleID: $0, codeEditorCompletions: false) }
         add(AppCatalog.needsEnhancedUserInterface) { AppRule(bundleID: $0, needsEnhancedUserInterface: true) }
@@ -99,6 +99,11 @@ enum AppCatalog {
         "co.zeit.hyper", "org.tabby", "com.cmuxterm.app",
     ]
 
+    /// Terminals whose screen text and character bounds are readable, so a coding agent's input box can be found.
+    static let agentPromptTerminals: Set<String> = ["com.apple.Terminal"]
+
+    static let orca = "com.stablyai.orca"
+
     static let vsCodeForks: Set<String> = [
         "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",
         "com.exafunction.windsurf", "com.vscodium", "com.stablyai.orca",
@@ -148,7 +153,7 @@ enum AppCatalog {
     ]
 
     static let singleCharacterInsertion: Set<String> = [
-        "com.finaldraft.finaldraft.v12", "com.finaldraft.finaldraft.v13", "com.freron.MailMate",
+        "com.finaldraft.finaldraft.v12", "com.finaldraft.finaldraft.v13", "com.freron.MailMate", AppCatalog.orca,
     ]
 
     static let ignoresSizeThresholds: Set<String> = ["com.apple.MobileSMS"]

@@ -19,7 +19,7 @@ Press Tab. That's the interface. Tab takes the next word, and the key above Tab 
 
 ## Features
 
-- **Suggestions everywhere.** Mail, Messages, Notes, Slack, browsers, code editors: any text field that macOS can read. Also in the middle of a line.
+- **Suggestions everywhere.** Mail, Messages, Notes, Slack, browsers, code editors: any text field that macOS can read. Also in the middle of a line, and in the prompt of a coding agent running in Terminal or Orca.
 - **Fluent in yours, right to left too.** The default model writes English, Arabic, French, German, Spanish, Japanese, Chinese and more.
 - **It sounds like you, app by app.** Ghostwriter stores what you write on this Mac and uses it to match your words and tone. You can add instructions about yourself, and different instructions for each app.
 - **Reads the context.** It can use the text near your cursor, such as the message you reply to, and text you copied recently.
@@ -38,7 +38,7 @@ Your words never leave this Mac.
 
 - Ghostwriter has no cloud service, no account, no analytics and no telemetry.
 - It connects to the internet for two things only: model downloads from Hugging Face and update checks.
-- It never reads or records text from secure fields, payment card and one-time code fields, password managers or apps you exclude.
+- It never reads or records text from secure fields, payment card and one-time code fields, password managers or apps you exclude. It never records what you type in a terminal.
 - While suggestions are off everywhere, it records nothing, unloads its model and reads text only for a shortcut you press.
 - Recorded writing, snippets and statistics are in one database file on your Mac. Settings > Privacy & Data shows it, and you can erase it there.
 - Screenshots for text recognition (optional) stay in memory and are discarded at once.

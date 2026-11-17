@@ -50,10 +50,13 @@ struct FieldReader {
     static let selectionLimit = 20_000
     static let maxLength = 999_999
     static let maxCaretWidth: CGFloat = 100
+    static let terminalTail = 12_000
+    static let terminalFont = ".AppleSystemUIFontMonospaced-Regular"
 
     let app: AppTarget
     let rule: AppRule
     let calibration: CaretCalibration
+    let readsTerminalAgentPrompts: Bool
 
     private static let textRoles: Set<String> = [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole]
     private static let mailAddressFields: Set<String> = [
@@ -113,12 +116,17 @@ struct FieldReader {
         if Self.mailAddressFields.contains(identifier) || ancestry.inSaveOrOpenPanel { return rejected(.excludedField) }
 
         let isTerminal = BuiltInAppRules.isTerminal(bundleID)
-        if isTerminal, rule.completionsEnabled != true { return rejected(.terminalShell) }
+        if isTerminal, !readsTerminalAgentPrompts || !AppCatalog.agentPromptTerminals.contains(bundleID) {
+            return rejected(.terminalShell)
+        }
 
         var isAgentComposer = false
         var isCodeEditor = AppCatalog.isCodeEditor(bundleID)
-        if AppCatalog.vsCodeForks.contains(bundleID) {
-            if domClasses.contains("xterm-helper-textarea") { return rejected(.terminalShell) }
+        let isRuntimeTerminal = domClasses.contains("xterm-helper-textarea")
+        if isRuntimeTerminal {
+            guard readsTerminalAgentPrompts, bundleID == AppCatalog.orca else { return rejected(.terminalShell) }
+            isCodeEditor = false
+        } else if AppCatalog.vsCodeForks.contains(bundleID) {
             isAgentComposer = !Self.agentComposerClasses.isDisjoint(with: domClasses)
                 || ancestry.domTokens.contains { token in Self.agentPanelTokens.contains { token.contains($0) } }
                 || !Self.agentPanelDescriptions.isDisjoint(with: ancestry.descriptions)
@@ -150,7 +158,7 @@ struct FieldReader {
             domIdentifier: domIdentifier,
             host: webArea == nil ? nil : context.url?.host().map(DomainPattern.normalize),
             isWeb: webArea != nil,
-            isTerminal: isTerminal,
+            isTerminal: isTerminal || isRuntimeTerminal,
             isCodeEditor: isCodeEditor,
             isAgentComposer: isAgentComposer
         ))
@@ -179,6 +187,11 @@ struct FieldReader {
     // MARK: Read
 
     func read(_ context: FieldContext, diagnostics: inout ReadDiagnostics) throws(AXFailure) -> ReadResult {
+        if context.kind == .terminal {
+            return app.identity.bundleID == AppCatalog.orca
+                ? try readOrcaPrompt(context)
+                : try readTerminalPrompt(context, diagnostics: &diagnostics)
+        }
         let element = context.element
         let attributes = try element.values([
             kAXSelectedTextRangeAttribute, kAXNumberOfCharactersAttribute, kAXPositionAttribute, kAXSizeAttribute,
@@ -228,6 +241,101 @@ struct FieldReader {
             language: context.language,
             caretIsEstimated: caret.source == .estimate
         ))
+    }
+
+    /// Reads the end of the terminal's text, where an agent draws its input box. The caret rect comes from the
+    /// character the caret follows: a collapsed range has no bounds in a terminal.
+    private func readTerminalPrompt(_ context: FieldContext, diagnostics: inout ReadDiagnostics) throws(AXFailure) -> ReadResult {
+        let element = context.element
+        let attributes = try element.values([
+            kAXSelectedTextRangeAttribute, kAXNumberOfCharactersAttribute, kAXPositionAttribute, kAXSizeAttribute,
+        ])
+        guard let count = AXDecode.int(attributes[kAXNumberOfCharactersAttribute]), count > 0 else {
+            return .ineligible(.terminalShell)
+        }
+        var start = max(0, count - Self.terminalTail)
+        guard var screen = try TextExtractor.string(element, CFRange(location: start, length: count - start)) else {
+            return .ineligible(.unreadable)
+        }
+        diagnostics.textPath = .stringForRange
+        if start > 0 {
+            let newline = screen.range(of: "\n")
+            guard newline.location != NSNotFound else { return .ineligible(.terminalShell) }
+            screen = screen.substring(from: newline.location + 1) as NSString
+            start += newline.location + 1
+        }
+        let cursor = AXDecode.range(attributes[kAXSelectedTextRangeAttribute]).map { $0.location - start }
+        guard let prompt = TerminalAgentPrompt.find(in: screen as String, cursor: cursor) else {
+            return .ineligible(.terminalShell)
+        }
+        let anchorRange = NSRange(location: start + prompt.anchor.location, length: prompt.anchor.length)
+        guard let anchor = try cellBounds(element, anchorRange) else { return .ineligible(.unreadable) }
+        diagnostics.caretSource = .previousCharacter
+        let caret = CGRect(x: anchor.maxX, y: anchor.minY, width: 1, height: anchor.height)
+        let draftStart = try prompt.draftStart.flatMap { offset throws(AXFailure) in
+            let cell = screen.rangeOfComposedCharacterSequence(at: offset)
+            return try cellBounds(element, NSRange(location: start + cell.location, length: cell.length))
+        } ?? caret
+        let right = max(Self.frame(attributes)?.maxX ?? caret.maxX, caret.maxX)
+        let fieldFrame = CGRect(
+            x: draftStart.minX, y: draftStart.minY, width: right - draftStart.minX, height: caret.maxY - draftStart.minY
+        )
+
+        return .field(FieldSnapshot(
+            id: FieldID(pid: app.identity.pid, elementHash: element.cfHash),
+            app: app.identity,
+            textBefore: prompt.textBefore,
+            textAfter: prompt.textAfter,
+            caretRect: caret,
+            fieldFrame: fieldFrame,
+            style: FieldStyle(fontName: Self.terminalFont),
+            kind: .terminal,
+            direction: FieldClassifier.direction(before: prompt.textBefore, after: prompt.textAfter),
+            windowTitle: context.windowTitle,
+            transcript: prompt.transcript
+        ))
+    }
+
+    /// Orca draws its terminal on a canvas, so the text comes from Orca itself. xterm.js keeps its hidden input at the
+    /// terminal cursor, one cell in size, which gives the caret and the cell size.
+    private func readOrcaPrompt(_ context: FieldContext) throws(AXFailure) -> ReadResult {
+        let element = context.element
+        guard let cell = Self.frame(try element.values([kAXPositionAttribute, kAXSizeAttribute])) else {
+            return .ineligible(.unreadable)
+        }
+        guard let terminal = OrcaRuntime.activeTerminal(pid: app.identity.pid) else { return .ineligible(.terminalShell) }
+        let screenFrame = try element.element(kAXParentAttribute)?.element(kAXParentAttribute)
+            .flatMap { screen throws(AXFailure) in Self.frame(try screen.values([kAXPositionAttribute, kAXSizeAttribute])) }
+        let caret = CGRect(x: cell.minX, y: cell.minY, width: 1, height: cell.height)
+        let left = (screenFrame?.minX).map { $0 + 2 * cell.width } ?? caret.minX
+        let right = max(screenFrame?.maxX ?? caret.maxX, caret.maxX)
+        let screen = terminal.screen.joined(separator: "\n")
+        let prompt = TerminalAgentPrompt.find(in: screen, cursor: nil)
+        guard terminal.draft != nil || prompt != nil else { return .ineligible(.terminalShell) }
+        let draft = terminal.draft ?? ""
+        let transcript = prompt?.transcript ?? screen
+
+        return .field(FieldSnapshot(
+            id: FieldID(pid: app.identity.pid, elementHash: element.cfHash),
+            app: app.identity,
+            textBefore: draft,
+            textAfter: "",
+            caretRect: caret,
+            fieldFrame: CGRect(x: min(left, caret.minX), y: caret.minY, width: right - min(left, caret.minX), height: caret.height),
+            style: FieldStyle(fontName: Self.terminalFont),
+            kind: .terminal,
+            direction: FieldClassifier.direction(before: draft, after: ""),
+            windowTitle: context.windowTitle,
+            transcript: transcript
+        ))
+    }
+
+    private func cellBounds(_ element: AXElement, _ range: NSRange) throws(AXFailure) -> CGRect? {
+        guard let parameter = AXDecode.rangeValue(CFRange(location: range.location, length: range.length)),
+              let rect = AXDecode.rect(try element.parameterized(kAXBoundsForRangeParameterizedAttribute, parameter)),
+              rect.minX.isFinite, rect.minY.isFinite, rect.height > 0, rect.width > 0, rect.origin != .zero
+        else { return nil }
+        return rect
     }
 
     private func style(_ context: FieldContext, text: ExtractedText) throws(AXFailure) -> FieldStyle {

@@ -201,7 +201,7 @@ enum TextExtractor {
         return AXDecode.int(try element.parameterized(kAXLengthForTextMarkerRangeParameterizedAttribute, range))
     }
 
-    private static func string(_ element: AXElement, _ range: CFRange) throws(AXFailure) -> NSString? {
+    static func string(_ element: AXElement, _ range: CFRange) throws(AXFailure) -> NSString? {
         guard let parameter = AXDecode.rangeValue(range),
               let text = AXDecode.string(try element.parameterized(kAXStringForRangeParameterizedAttribute, parameter))
         else { return nil }

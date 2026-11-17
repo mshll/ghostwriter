@@ -73,7 +73,7 @@ actor CaptureWorker {
         if preparationRetry?.pid == pid { preparationRetry = nil }
     }
 
-    func read(_ app: AppTarget, rule: AppRule) -> ReadOutcome {
+    func read(_ app: AppTarget, rule: AppRule, readsTerminalAgentPrompts: Bool) -> ReadOutcome {
         let started = ContinuousClock.now
         let callsBefore = AXElement.callCount
         let signpost = Self.signposter.beginInterval("FieldRead")
@@ -89,7 +89,9 @@ actor CaptureWorker {
         } else {
             let preparing = retryPreparation(app, rule: rule)
             do {
-                (result, retrySoon) = try readFocused(app, rule: rule, diagnostics: &diagnostics)
+                (result, retrySoon) = try readFocused(
+                    app, rule: rule, readsTerminalAgentPrompts: readsTerminalAgentPrompts, diagnostics: &diagnostics
+                )
                 retrySoon = retrySoon || preparing
             } catch {
                 retrySoon = preparing
@@ -110,7 +112,7 @@ actor CaptureWorker {
     }
 
     private func readFocused(
-        _ app: AppTarget, rule: AppRule, diagnostics: inout ReadDiagnostics
+        _ app: AppTarget, rule: AppRule, readsTerminalAgentPrompts: Bool, diagnostics: inout ReadDiagnostics
     ) throws(AXFailure) -> (ReadResult, Bool) {
         let appElement = AXElement.application(app.identity.pid)
         guard let focused = try appElement.element(kAXFocusedUIElementAttribute) else {
@@ -121,7 +123,9 @@ actor CaptureWorker {
             return (.ineligible(.noFocusedElement), wroteEnhanced)
         }
 
-        let reader = FieldReader(app: app, rule: rule, calibration: calibration)
+        let reader = FieldReader(
+            app: app, rule: rule, calibration: calibration, readsTerminalAgentPrompts: readsTerminalAgentPrompts
+        )
         let fieldContext: FieldContext
         if let context, context.element == focused, context.rule == rule {
             fieldContext = context
