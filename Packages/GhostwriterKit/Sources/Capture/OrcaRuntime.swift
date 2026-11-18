@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import GWCore
 import os
+import Synchronization
 
 /// Reads the active terminal of a running Orca app through the local socket its `orca` command-line tool uses.
 /// Orca reports the text typed into a coding agent's prompt as the terminal's draft. It reports no draft at a shell
@@ -17,11 +18,15 @@ enum OrcaRuntime {
     private static let timeout = timeval(tv_sec: 0, tv_usec: 150_000)
     private static let responseLimit = 1 << 20
 
-    static func activeTerminal(pid: pid_t) -> Terminal? {
+    private static let focus = Mutex(OrcaFocus())
+
+    /// `field` identifies the focused input element. Orca gives every terminal its own.
+    static func activeTerminal(pid: pid_t, field: UInt) -> Terminal? {
         guard let runtime = runtime(pid: pid) else { return nil }
-        guard let handle = call(runtime, ResolveActive.self, method: "terminal.resolveActive", params: [:])?.handle else {
-            return nil
-        }
+        let params: [String: any Sendable] = ["limit": 500, "includePreview": false, "includeAttention": true]
+        guard let listing = call(runtime, OrcaFocus.Listing.self, method: "terminal.list", params: params),
+              let handle = focus.withLock({ $0.handle(for: field, in: listing) })
+        else { return nil }
         let read = call(runtime, Read.self, method: "terminal.read", params: ["terminal": handle, "screen": true])
         guard let terminal = read?.terminal else { return nil }
         return Terminal(draft: terminal.draft, screen: terminal.tail ?? [])
@@ -48,10 +53,6 @@ enum OrcaRuntime {
     private struct Response<Result: Decodable>: Decodable {
         var ok: Bool
         var result: Result?
-    }
-
-    private struct ResolveActive: Decodable {
-        var handle: String?
     }
 
     private struct Read: Decodable {
