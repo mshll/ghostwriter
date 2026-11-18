@@ -303,7 +303,9 @@ struct FieldReader {
         guard let cell = Self.frame(try element.values([kAXPositionAttribute, kAXSizeAttribute])) else {
             return .ineligible(.unreadable)
         }
-        guard let terminal = OrcaRuntime.activeTerminal(pid: app.identity.pid) else { return .ineligible(.terminalShell) }
+        guard let terminal = OrcaRuntime.activeTerminal(pid: app.identity.pid, field: element.cfHash) else {
+            return .ineligible(.terminalShell)
+        }
         let screenFrame = try element.element(kAXParentAttribute)?.element(kAXParentAttribute)
             .flatMap { screen throws(AXFailure) in Self.frame(try screen.values([kAXPositionAttribute, kAXSizeAttribute])) }
         let caret = CGRect(x: cell.minX, y: cell.minY, width: 1, height: cell.height)
