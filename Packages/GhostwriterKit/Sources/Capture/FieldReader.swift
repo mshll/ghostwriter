@@ -156,7 +156,7 @@ struct FieldReader {
             role: role,
             label: context.label,
             domIdentifier: domIdentifier,
-            host: webArea == nil ? nil : context.url?.host().map(DomainPattern.normalize),
+            url: webArea == nil ? nil : context.url,
             isWeb: webArea != nil,
             isTerminal: isTerminal || isRuntimeTerminal,
             isCodeEditor: isCodeEditor,

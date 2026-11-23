@@ -1667,16 +1667,14 @@ final class CompletionCoordinator {
 
     private func rule(for snapshot: FieldSnapshot) -> AppRule {
         let appRule = services.appRules.effectiveRule(for: snapshot.app.bundleID)
-        guard let host = snapshot.url?.host() else { return appRule }
-        return appRule.merged(with: rule(forKey: "domain:" + Self.normalizedHost(host)))
+        guard let url = snapshot.url, let host = url.host() else { return appRule }
+        let key = "domain:" + Self.normalizedHost(host)
+        return appRule.merged(with: BuiltInAppRules.domainRule(for: url)).merged(with: services.appRules.rule(for: key))
     }
 
+    /// Site keys give only the user's rule: the tracker adds the built-in one, which depends on the page's URL.
     private func rule(forKey key: String) -> AppRule? {
-        guard key.hasPrefix("domain:") else { return services.appRules.effectiveRule(for: key) }
-        let host = String(key.dropFirst("domain:".count))
-        let builtIn = BuiltInAppRules.domainRule(forHost: host)
-        guard let user = services.appRules.rule(for: key) else { return builtIn }
-        return (builtIn ?? AppRule(bundleID: key)).merged(with: user)
+        key.hasPrefix("domain:") ? services.appRules.rule(for: key) : services.appRules.effectiveRule(for: key)
     }
 
     private static func normalizedHost(_ host: String) -> String {
