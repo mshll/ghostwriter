@@ -34,6 +34,7 @@ final class FieldContext {
     var kind: FieldKind = .unknown
     var style: (caret: Int, value: FieldStyle)?
     var matchedFont: (size: Double, family: String?)?
+    let calibration = CaretCalibration()
 
     init(element: AXElement, rule: AppRule, role: String, verdict: IneligibleReason?) {
         self.element = element
@@ -55,7 +56,6 @@ struct FieldReader {
 
     let app: AppTarget
     let rule: AppRule
-    let calibration: CaretCalibration
     let readsTerminalAgentPrompts: Bool
 
     private static let textRoles: Set<String> = [kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole]
@@ -216,10 +216,12 @@ struct FieldReader {
         let direction = FieldClassifier.direction(before: text.before, after: text.after)
         var style = try style(context, text: text)
         let caret = try CaretLocator.caret(
-            element, text: text, frame: frame, style: style, direction: direction,
-            bundleID: app.identity.bundleID, calibration: calibration
+            element, text: text, frame: frame, style: style, direction: direction, calibration: context.calibration
         )
         diagnostics.caretSource = caret.source
+        let visibleTextEnd = try CaretLocator.visibleTextEnd(
+            element, text: text, caret: caret.rect, frame: frame, direction: direction
+        )
         if style.fontName == nil, let size = style.fontSize {
             style.fontName = try matchedFont(context, text: text, size: size, style: style)
         }
@@ -239,7 +241,8 @@ struct FieldReader {
             windowTitle: context.windowTitle,
             url: context.url,
             language: context.language,
-            caretIsEstimated: caret.source == .estimate
+            caretIsEstimated: caret.source == .estimate,
+            visibleTextEnd: visibleTextEnd
         ))
     }
 

@@ -37,7 +37,6 @@ actor CaptureWorker {
     private var flagWrites: [WebAccessibility.Flag: ContinuousClock.Instant] = [:]
     private var enhancedFallback = EnhancedUserInterfaceFallback()
     private var preparationRetry: PreparationRetry?
-    private let calibration = CaretCalibration()
 
     func attach(_ app: AppTarget, rule: AppRule, registration: ObserverRegistration?) -> Bool {
         detach()
@@ -123,9 +122,7 @@ actor CaptureWorker {
             return (.ineligible(.noFocusedElement), wroteEnhanced)
         }
 
-        let reader = FieldReader(
-            app: app, rule: rule, calibration: calibration, readsTerminalAgentPrompts: readsTerminalAgentPrompts
-        )
+        let reader = FieldReader(app: app, rule: rule, readsTerminalAgentPrompts: readsTerminalAgentPrompts)
         let fieldContext: FieldContext
         if let context, context.element == focused, context.rule == rule {
             fieldContext = context
