@@ -42,7 +42,7 @@ Your words never leave this Mac.
 - While suggestions are off everywhere, it records nothing, unloads its model and reads text only for a shortcut you press.
 - Recorded writing, snippets and statistics are in one database file on your Mac. Settings > Privacy & Data shows it, and you can erase it there.
 - Screenshots for text recognition (optional) stay in memory and are discarded at once.
-- Text from the window you just left is read once as you switch away and stays in memory for up to 10 minutes. It is never read from password managers, terminals, or apps and sites you exclude.
+- Text from the window you just left is read once as you switch away, and only fields you start typing in within 10 minutes use it. It stays in memory, and is never read from password managers, terminals, or apps and sites you exclude.
 
 ## Install
 
