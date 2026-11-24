@@ -12,6 +12,8 @@ let usage = """
           read the focused field of the frontmost (or given) app and run its screen context; counts only
       window --app <bundle id> [--caret center|top|bottom] [same options as screen]
           the same on the app's front window, without a focused field
+      left --app <bundle id> [--runs <n>]
+          read the app's front window as a window the user left, without new OCR; counts and timings only
       flags --app <bundle id> [--role] [--flag manual|enhanced|both] [--watch <s>]
           focus and tree size over time after reading the app role and writing the web flags (never false)
       census --app <bundle id> [--focused]
@@ -258,6 +260,7 @@ case "screen": await screen(rest)
 case "flags": await flagsCommand(rest)
 case "census": censusCommand(rest)
 case "window": await windowCommand(rest)
+case "left": await leftWindowCommand(rest)
 case "focus": await focusCommand(rest)
 case "ocr": await ocr(rest)
 case "warm": await warm(rest)

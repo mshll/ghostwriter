@@ -277,6 +277,25 @@ func windowCommand(_ args: [String]) async {
     await runPipeline(snapshot, options: pipelineOptions(args))
 }
 
+func leftWindowCommand(_ args: [String]) async {
+    let app = targetApp(args)
+    let runs = option("--runs", in: args).flatMap(Int.init) ?? 5
+    let provider = ScreenContextProvider()
+    for run in 1...max(runs, 1) {
+        var start = uptime()
+        guard let window = await WindowHandle.front(of: app.processIdentifier) else {
+            print("no AX window")
+            return
+        }
+        let findMs = msSince(start)
+        start = uptime()
+        let capture = await provider.capture(window, appName: app.localizedName ?? "")
+        let captureMs = msSince(start)
+        print("run \(run): window \(fmt(findMs)) ms, capture \(fmt(captureMs)) ms; \(capture?.summary ?? "unreadable"); "
+            + "title \(capture?.title?.isEmpty == false ? "yes" : "no"), addresses \(capture?.urls.count ?? 0)")
+    }
+}
+
 func pipelineOptions(_ args: [String]) -> ScreenContextOptions {
     var options = ScreenContextOptions()
     switch option("--ocr", in: args) ?? "default" {
