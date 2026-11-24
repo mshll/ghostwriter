@@ -10,6 +10,8 @@ struct ContextPane: View {
         SettingsPaneView(pane: .context) {
             Section {
                 SettingRow(ContextSetting.windowText, isOn: $preferences.screenContextEnabled)
+                SettingRow(ContextSetting.recentWindow, isOn: $preferences.recentWindowEnabled)
+                    .disabled(!preferences.screenContextEnabled)
             } header: {
                 Text("Window text")
             }
@@ -59,11 +61,12 @@ struct ContextPane: View {
 }
 
 enum ContextSetting: SettingKey {
-    case windowText, screenRecording, screenshots, clipboard, pasteFromOtherApps
+    case windowText, recentWindow, screenRecording, screenshots, clipboard, pasteFromOtherApps
 
     var text: SettingText {
         switch self {
         case .windowText: SettingText("Use text from the window you\u{2019}re typing in", subtitle: "Ghostwriter reads the visible text near your cursor, such as the message you\u{2019}re replying to, through Accessibility. It is used for the next suggestion only and never stored.", keywords: ["accessibility", "screen", "reply"])
+        case .recentWindow: SettingText("Use text from the window you were just in", subtitle: "Such as the page you read before switching here. Used for 10 minutes and never stored.", keywords: ["recent", "previous", "switch", "browser"])
         case .screenRecording: SettingText("Screen Recording", keywords: ["permission", "privacy"])
         case .screenshots: SettingText("Read text from screenshots when needed", subtitle: "Some apps don\u{2019}t expose their text to Accessibility. With Screen Recording allowed, Ghostwriter can recognize the text in a screenshot of the window instead. Suggestions in the middle of a line also use a screenshot to match the field\u{2019}s background. Screenshots stay in memory and are discarded right away.", keywords: ["ocr", "screen", "capture"])
         case .clipboard: SettingText("Use text you copied recently", subtitle: "Text you copied in the last few minutes helps when you paste a question and answer it. Passwords and other concealed clipboard items are skipped.", keywords: ["clipboard", "pasteboard", "copy"])

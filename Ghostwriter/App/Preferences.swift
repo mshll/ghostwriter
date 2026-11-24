@@ -152,6 +152,11 @@ final class Preferences {
         set { setValue(newValue, \.screenContextEnabled) }
     }
 
+    var recentWindowEnabled: Bool {
+        get { value(\.recentWindowEnabled, default: true) }
+        set { setValue(newValue, \.recentWindowEnabled) }
+    }
+
     var ocrEnabled: Bool {
         get { value(\.ocrEnabled, default: false) }
         set { setValue(newValue, \.ocrEnabled) }

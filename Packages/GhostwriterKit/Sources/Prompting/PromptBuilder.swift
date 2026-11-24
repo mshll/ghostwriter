@@ -26,6 +26,8 @@ public struct PromptBuilder: Sendable {
         let examplesDemand = exampleTokens.reduce(0, +) + separatorTokens * max(0, examples.count - 1)
         let clipboard = Self.trimmed(context.clipboard ?? "")
         let screen = Self.trimmed(context.screenText ?? "")
+        let recent = Self.trimmed(context.recentWindow?.text ?? "")
+        let recentTokens = context.recentWindow?.tokens ?? fitter.measure(recent[...], limit: budgets.recentWindow)
 
         let allocation = BudgetAllocator.allocate(
             demands: [
@@ -34,8 +36,9 @@ public struct PromptBuilder: Sendable {
                 min(examplesDemand, budgets.examples),
                 min(fitter.measure(screen[...], limit: budgets.screen), budgets.screen),
                 min(fitter.measure(clipboard[...], limit: budgets.clipboard), budgets.clipboard),
+                min(recentTokens, budgets.recentWindow),
             ],
-            priorities: [0, 0, 1, 1, 2],
+            priorities: [0, 0, 1, 1, 2, 3],
             total: budgets.total,
             step: budgets.step
         )
@@ -46,6 +49,8 @@ public struct PromptBuilder: Sendable {
         let pickedExamples = Self.pack(examples, tokens: exampleTokens, separatorTokens: separatorTokens, budget: allocation[2], fitter: fitter)
         let screenSection = fitter.fit(screen[...], budget: allocation[3], keep: .end)
         let clipboardSection = fitter.fit(clipboard[...], budget: allocation[4], keep: .start)
+        let recentSection = (context.recentWindow?.tokens ?? .max) <= allocation[5]
+            ? recent : fitter.fit(recent[...], budget: allocation[5], keep: .start)
         let after = fitter.fit(afterSource[...], budget: allocation[1], keep: .start)
         let typedText = Self.plainTrailingSpaces(typed.head).drop(while: \.isWhitespace)
         let (before, beforeAnchor) = context.mode == .inline
@@ -57,6 +62,9 @@ public struct PromptBuilder: Sendable {
         if !environment.isEmpty { text += environment.joined(separator: "\n") + "\n\n" }
         if !pickedExamples.isEmpty {
             text += PromptText.examplesLabel + pickedExamples.joined(separator: PromptText.exampleSeparator) + "\n\n"
+        }
+        if !recentSection.isEmpty, let window = context.recentWindow {
+            text += PromptText.recentWindowLabel(window) + recentSection + "\n\n"
         }
         if !clipboardSection.isEmpty { text += PromptText.clipboardLabel + clipboardSection + "\n\n" }
         if !screenSection.isEmpty { text += PromptText.screenLabel + screenSection + "\n\n" }
@@ -72,6 +80,15 @@ public struct PromptBuilder: Sendable {
             includesDate: EnvironmentLines.includesDate(context, language: language),
             beforeAnchor: beforeAnchor
         )
+    }
+
+    /// The window's text cut to its section budget and counted once, so building each prompt does neither again.
+    public func fitted(_ window: PromptContext.RecentWindow) -> PromptContext.RecentWindow {
+        var fitted = window
+        fitted.text = SectionFitter(counter: counter)
+            .fit(Self.trimmed(window.text)[...], budget: budgets.recentWindow, keep: .start)
+        fitted.tokens = counter.countTokens(fitted.text)
+        return fitted
     }
 
     /// Rich text editors report a space typed at the end as a no-break space. As a plain one it goes to the
@@ -135,10 +152,21 @@ enum PromptText {
     static let exampleSeparator = "\n\n---\n\n"
     static let separatorStop = "\n\n---\n"
     static let clipboardLabel = "Text I recently copied:\n"
+    static let recentWindowLabelStart = "Text in the window I just left"
     static let screenLabel = "Text on my screen:\n"
     static let afterLabel = "Text that comes right after my cursor:\n"
     static let typingLabel = "What I am writing:\n\n"
     static let typingMidLineLabel = "What I am writing, up to my cursor:\n\n"
+
+    static func recentWindowLabel(_ window: PromptContext.RecentWindow) -> String {
+        let app = EnvironmentLines.singleLine(window.appName)
+        let title = EnvironmentLines.singleLine(window.title).flatMap { title in
+            title.caseInsensitiveCompare(app ?? "") == .orderedSame ? nil : "\"\(title)\""
+        }
+        let parts = [app, title, EnvironmentLines.singleLine(window.host)].compactMap { $0 }
+        guard !parts.isEmpty else { return recentWindowLabelStart + ":\n" }
+        return recentWindowLabelStart + " (" + parts.joined(separator: ", ") + "):\n"
+    }
 
     static let labels = [
         instructionsLabel, examplesLabel, clipboardLabel, screenLabel, afterLabel, typingLabel, typingMidLineLabel,

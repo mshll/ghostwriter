@@ -77,6 +77,24 @@ public actor ScreenContextProvider {
 
     public func lastScanSummary() -> String? { summary }
 
+    /// Reads a window the user left, through Accessibility. Text recognized from a screenshot of it earlier is used
+    /// when Accessibility gives none; no new screenshot is taken.
+    public func capture(_ window: WindowHandle, appName: String) async -> WindowCapture? {
+        guard window.pid != getpid(), let scan = await AXWindowReader.scan(window) else { return nil }
+        let limit = RecentWindow.maxCharacters
+        var source = "ax"
+        var text = RecentWindowText.render(scan.chunks, title: scan.title, appName: appName, maxCharacters: limit)
+        if text == nil, let chunks = windowReads.chunks(
+            of: WindowKey(pid: window.pid, frame: scan.windowFrame), outside: .zero, at: .now
+        ) {
+            source = "earlier ocr"
+            text = RecentWindowText.render(chunks, title: scan.title, appName: appName, maxCharacters: limit)
+        }
+        let summary = "left window: \(scan.nodesVisited) nodes, \(String(format: "%.1f", scan.elapsedMs)) ms, "
+            + "\(text?.count ?? 0) chars from \(source)\(scan.hitBudget ? ", budget hit" : "")"
+        return WindowCapture(title: scan.title, urls: scan.urls, text: text, summary: summary)
+    }
+
     public static func ocrText(
         of image: CGImage, imageFrame: CGRect, for snapshot: FieldSnapshot, options: ScreenContextOptions
     ) async throws -> String? {
