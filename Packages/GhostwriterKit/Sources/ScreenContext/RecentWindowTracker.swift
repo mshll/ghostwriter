@@ -17,7 +17,8 @@ public final class RecentWindowTracker {
 
     private let screen: ScreenContextProvider
     private let logger = Logger.gw("RecentWindow")
-    private var current: (app: AppIdentity, window: WindowHandle)?
+    /// The window is nil while the app shows none to Accessibility yet, as Chromium does until it is asked to.
+    private var current: (app: AppIdentity, window: WindowHandle?)?
     private var stored: RecentWindow?
     private var work: Task<Void, Never>?
     private var expiry: Task<Void, Never>?
@@ -49,20 +50,20 @@ public final class RecentWindowTracker {
         if let work, await Deadline.run(within: .milliseconds(Self.waitLimitMs), { await work.value }) == nil {
             logger.info("Left window: still reading after \(Self.waitLimitMs, privacy: .public) ms, left out")
         }
-        let typing = current?.app.pid == pid ? current?.window : await WindowHandle.front(of: pid)
+        var typing = current?.app.pid == pid ? current?.window : nil
+        if typing == nil { typing = await WindowHandle.front(of: pid) }
         return RecentWindow.select(stored, enabled: true, typingIn: typing, at: .now)
     }
 
     private func arrive(in app: AppIdentity) async {
-        guard let window = await WindowHandle.front(of: app.pid) else { return }
-        guard let left = current, left.window != window else {
-            current = (app, window)
-            return
-        }
-        current = (app, window)
+        let window = await WindowHandle.front(of: app.pid)
+        let left = current
+        current = (app, window ?? (left?.app.pid == app.pid ? left?.window : nil))
+        guard let left, left.app.pid != app.pid || (window != nil && left.window != window) else { return }
         guard mayRead(left.app) else { return logger.info("Left window: skipped by its app's rules") }
         var leftWindow = left.window
         if left.app.pid != app.pid, let front = await WindowHandle.front(of: left.app.pid) { leftWindow = front }
+        guard let leftWindow else { return logger.info("Left window: not readable") }
         guard let capture = await screen.capture(leftWindow, appName: left.app.name) else {
             return logger.info("Left window: not readable")
         }
