@@ -309,3 +309,80 @@ import Testing
         #expect(CaretLocator.emptyLineCaret(CGRect(x: 412, y: 881, width: 0, height: 17), in: field, style: FieldStyle(), rightToLeft: false) == nil)
     }
 }
+
+@Suite struct CollapsedRangeCalibrationTests {
+    @Test func anchorIsTheLastCharacterBeforeTheLineBreaks() {
+        let anchor = CaretLocator.anchor(before: "Alpha one\n\n", after: "\nBravo", caret: 11)
+        #expect(anchor?.location == 8)
+        #expect(anchor?.length == 1)
+    }
+
+    @Test func anchorFallsBackToTheFirstCharacterAfter() {
+        let anchor = CaretLocator.anchor(before: "\n\n", after: "\n😀 Bravo", caret: 2)
+        #expect(anchor?.location == 3)
+        #expect(anchor?.length == 2)
+    }
+
+    @Test func anchorCountsUTF16Units() {
+        let anchor = CaretLocator.anchor(before: "a😀\n", after: "", caret: 4)
+        #expect(anchor?.location == 1)
+        #expect(anchor?.length == 2)
+    }
+
+    @Test func onlyLineBreaksHaveNoAnchor() {
+        #expect(CaretLocator.anchor(before: "\n\n", after: "\n", caret: 2) == nil)
+        #expect(CaretLocator.anchor(before: "", after: "", caret: 0) == nil)
+    }
+
+    @Test func textKitCollapsedRangeSitsOneLineAbove() {
+        let collapsed = CGRect(x: 110, y: 118, width: 0, height: 14)
+        let character = CGRect(x: 110, y: 132, width: 7.2, height: 14)
+        #expect(CaretLocator.isLineAbove(collapsed, character))
+    }
+
+    @Test func textKitFirstLineSitsAboveTheFieldTop() {
+        let fieldTop = CGRect(x: 100, y: 132, width: 700, height: 0)
+        #expect(CaretLocator.isLineAbove(CGRect(x: 110, y: 118, width: 0, height: 14), fieldTop))
+        #expect(!CaretLocator.isLineAbove(CGRect(x: 121, y: 172, width: 0, height: 18), CGRect(x: 114, y: 164, width: 534, height: 0)))
+    }
+
+    @Test func webCollapsedRangeSitsOnTheCharacterLine() {
+        #expect(!CaretLocator.isLineAbove(CGRect(x: 121, y: 172, width: 0, height: 18), CGRect(x: 121, y: 172, width: 11, height: 18)))
+        #expect(!CaretLocator.isLineAbove(CGRect(x: 123, y: 136, width: 2, height: 18), CGRect(x: 123, y: 136, width: 12, height: 18)))
+    }
+}
+
+@Suite struct SoftWrapCaretTests {
+    private let chromeLineEnd = CGRect(x: 623, y: 292, width: 5, height: 18)
+    private let chromeLineStart = CGRect(x: 121, y: 312, width: 9, height: 18)
+    private let textKitLineEnd = CGRect(x: 789.1, y: 216, width: 0.9, height: 14)
+    private let textKitLineStart = CGRect(x: 110, y: 230, width: 7.2, height: 14)
+
+    @Test func charactersAcrossAWrapAreOnDifferentLines() {
+        #expect(!CaretLocator.onSameLine(chromeLineEnd, chromeLineStart))
+        #expect(!CaretLocator.onSameLine(textKitLineEnd, textKitLineStart))
+    }
+
+    @Test func caretMovedToTheLineEndStaysOnIt() {
+        let chromeLine = CGRect(x: 121, y: 292, width: 507, height: 18)
+        #expect(!CaretLocator.isOnNextLine(chromeLine, previous: chromeLineEnd, next: chromeLineStart))
+        let textKitCollapsed = CGRect(x: 790, y: 216, width: 0, height: 14)
+        #expect(!CaretLocator.isOnNextLine(textKitCollapsed, previous: textKitLineEnd, next: textKitLineStart))
+    }
+
+    @Test func caretMovedToTheLineStartFollowsIt() {
+        let chromeLine = CGRect(x: 121, y: 312, width: 250, height: 18)
+        #expect(CaretLocator.isOnNextLine(chromeLine, previous: chromeLineEnd, next: chromeLineStart))
+        let textKitCollapsed = CGRect(x: 110, y: 230, width: 0, height: 14)
+        #expect(CaretLocator.isOnNextLine(textKitCollapsed, previous: textKitLineEnd, next: textKitLineStart))
+    }
+
+    @Test func lineTallerThanBothCharactersDecidesNothing() {
+        let paragraph = CGRect(x: 121, y: 292, width: 507, height: 38)
+        #expect(!CaretLocator.isOnNextLine(paragraph, previous: chromeLineEnd, next: chromeLineStart))
+    }
+
+    @Test func charactersOfMixedHeightOnOneLineMatch() {
+        #expect(CaretLocator.onSameLine(CGRect(x: 617, y: 254, width: 10, height: 20), CGRect(x: 625, y: 254, width: 2, height: 18)))
+    }
+}
