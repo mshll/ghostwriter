@@ -8,6 +8,8 @@ struct AXWindowScan: Sendable {
     var nodesVisited: Int
     var elapsedMs: Double
     var hitBudget: Bool
+    var title: String?
+    var urls: [URL] = []
 }
 
 struct AXScanBudget: Sendable {
@@ -19,14 +21,43 @@ struct AXScanBudget: Sendable {
 
 enum AXWindowReader {
     private static let queue = DispatchQueue(label: "com.mshl.ghostwriter.screencontext.ax", qos: .userInitiated)
+    /// Separate from `queue`, so reading a window the user left never delays the scan for the field they arrive in.
+    private static let leftWindowQueue = DispatchQueue(
+        label: "com.mshl.ghostwriter.screencontext.left-window", qos: .userInitiated
+    )
 
     static func scan(
         pid: pid_t, caret: CGRect, field: CGRect, fieldText: String, budget: AXScanBudget = AXScanBudget()
     ) async -> AXWindowScan? {
         await withCheckedContinuation { continuation in
             queue.async {
-                var walker = Walker(pid: pid, caret: caret, field: field, fieldText: fieldText, budget: budget)
+                var walker = Walker(
+                    pid: pid, start: nil, caret: caret, field: field, fieldText: fieldText, budget: budget
+                )
                 continuation.resume(returning: walker.run())
+            }
+        }
+    }
+
+    /// Reads `window` from its top, with its title and page addresses.
+    static func scan(_ window: WindowHandle, budget: AXScanBudget = AXScanBudget()) async -> AXWindowScan? {
+        await withCheckedContinuation { continuation in
+            leftWindowQueue.async {
+                var walker = Walker(
+                    pid: window.pid, start: window.element, caret: nil, field: .zero, fieldText: "", budget: budget
+                )
+                continuation.resume(returning: walker.run())
+            }
+        }
+    }
+
+    static func frontWindow(of pid: pid_t) async -> WindowHandle? {
+        await withCheckedContinuation { continuation in
+            leftWindowQueue.async {
+                let app = AXUIElementCreateApplication(pid)
+                AXUIElementSetMessagingTimeout(app, AXScanBudget().messagingTimeout)
+                let window = copyElement(app, kAXFocusedWindowAttribute) ?? copyElement(app, kAXMainWindowAttribute)
+                continuation.resume(returning: window.map { WindowHandle(element: $0, pid: pid) })
             }
         }
     }
@@ -42,6 +73,7 @@ private let chromeRoles: Set<String> = [
 private let textInputRoles: Set<String> = [kAXTextFieldRole, kAXTextAreaRole]
 private let skippedSubroles: Set<String> = [kAXSecureTextFieldSubrole, kAXSearchFieldSubrole]
 private let inlineRoles: Set<String> = ["AXLink"]
+private let webAreaRole = "AXWebArea"
 private let clippingRoles: Set<String> = [kAXScrollAreaRole, kAXWindowRole]
 private let estimatedChildSpacing: CGFloat = 20
 private let maxChildrenPerContainer = 400
@@ -70,15 +102,19 @@ private struct Fragment {
 
 private struct Walker {
     let pid: pid_t
-    let caret: CGRect
+    let start: AXUIElement?
+    var caret: CGRect
+    let anchorsAtTop: Bool
     let field: CGRect
     let fieldText: String
     let budget: AXScanBudget
     let attributes = attributeNames as CFArray
 
-    init(pid: pid_t, caret: CGRect, field: CGRect, fieldText: String, budget: AXScanBudget) {
+    init(pid: pid_t, start: AXUIElement?, caret: CGRect?, field: CGRect, fieldText: String, budget: AXScanBudget) {
         self.pid = pid
-        self.caret = caret
+        self.start = start
+        self.caret = caret ?? .zero
+        anchorsAtTop = caret == nil
         self.field = field
         self.fieldText = fieldText.trimmingCharacters(in: .whitespacesAndNewlines)
         self.budget = budget
@@ -87,15 +123,29 @@ private struct Walker {
     mutating func run() -> AXWindowScan? {
         let start = DispatchTime.now().uptimeNanoseconds
         let deadline = start + UInt64(budget.seconds * 1e9)
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, budget.messagingTimeout)
-        let focused = copyElement(app, kAXFocusedUIElementAttribute)
-        if let focused { AXUIElementSetMessagingTimeout(focused, budget.messagingTimeout) }
-        guard let window = copyElement(app, kAXFocusedWindowAttribute)
-            ?? focused.flatMap({ copyElement($0, kAXWindowAttribute) })
-        else { return nil }
+        var focused: AXUIElement?
+        let window: AXUIElement
+        if let given = self.start {
+            window = given
+        } else {
+            let app = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(app, budget.messagingTimeout)
+            focused = copyElement(app, kAXFocusedUIElementAttribute)
+            if let focused { AXUIElementSetMessagingTimeout(focused, budget.messagingTimeout) }
+            guard let found = copyElement(app, kAXFocusedWindowAttribute)
+                ?? focused.flatMap({ copyElement($0, kAXWindowAttribute) })
+            else { return nil }
+            window = found
+        }
         AXUIElementSetMessagingTimeout(window, budget.messagingTimeout)
         let windowFrame = frame(of: window) ?? .zero
+        var title: String?
+        var urls: [URL] = []
+        if anchorsAtTop {
+            caret = CGRect(x: windowFrame.minX, y: windowFrame.minY, width: max(windowFrame.width, 1), height: 1)
+            title = copyString(window, kAXTitleAttribute)
+            urls += [copyURL(window, kAXDocumentAttribute)].compactMap { $0 }
+        }
 
         var heap = NodeHeap()
         heap.push(Node(
@@ -114,6 +164,9 @@ private struct Walker {
             if let focused, CFEqual(node.element, focused) { continue }
             guard let info = read(node.element) else { continue }
             if chromeRoles.contains(info.role) || skippedSubroles.contains(info.subrole) { continue }
+            if anchorsAtTop, info.role == webAreaRole, let url = copyURL(node.element, kAXURLAttribute) {
+                urls.append(url)
+            }
 
             var clip = node.clip
             if let frame = info.frame, !frame.isEmpty {
@@ -122,6 +175,8 @@ private struct Walker {
                 if clippingRoles.contains(info.role) { clip = clip.isEmpty ? frame : clip.intersection(frame) }
             }
 
+            // Single-line fields hold form entries such as card numbers and one-time codes.
+            if info.role == kAXTextFieldRole { continue }
             if let text = info.value, info.role == kAXStaticTextRole || textInputRoles.contains(info.role) {
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty, trimmed != fieldText, let frame = info.frame {
@@ -165,7 +220,7 @@ private struct Walker {
         let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
         return AXWindowScan(
             windowFrame: windowFrame, chunks: paragraphs(from: fragments),
-            nodesVisited: visited, elapsedMs: elapsed, hitBudget: hitBudget
+            nodesVisited: visited, elapsedMs: elapsed, hitBudget: hitBudget, title: title, urls: urls
         )
     }
 
@@ -269,6 +324,19 @@ private func copyElement(_ element: AXUIElement, _ attribute: String) -> AXUIEle
           let value
     else { return nil }
     return asElement(value)
+}
+
+private func copyString(_ element: AXUIElement, _ attribute: String) -> String? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+    return value as? String
+}
+
+private func copyURL(_ element: AXUIElement, _ attribute: String) -> URL? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success, let value else { return nil }
+    if let url = value as? URL { return url }
+    return (value as? String).flatMap(URL.init(string:))
 }
 
 private func asElement(_ value: AnyObject) -> AXUIElement? {

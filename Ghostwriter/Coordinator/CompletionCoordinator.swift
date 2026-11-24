@@ -43,6 +43,7 @@ final class CompletionCoordinator {
     private let hotKeys = HotKeyCenter()
     private let overlay = GhostOverlay()
     private let screen = ScreenContextProvider()
+    private let recentWindows: RecentWindowTracker
     private let power = PowerMonitor()
     private let models: ModelController
     private let recorder: WritingRecorder
@@ -92,12 +93,16 @@ final class CompletionCoordinator {
         self.selectionActions = selectionActions
         models = ModelController(services: services, appState: appState, preferences: preferences, power: power)
         recorder = WritingRecorder(memory: services.memory)
+        recentWindows = RecentWindowTracker(screen: screen)
     }
 
     func start() {
         recorder.isAllowed = { [weak self] snapshot in self?.mayRecord(snapshot) ?? false }
         tracker.ruleProvider = { [weak self] key in self?.rule(forKey: key) }
         tracker.onEvent = { [weak self] event in self?.handle(event) }
+        tracker.onFocusedWindowChange = { [weak self] app in self?.recentWindows.entered(app) }
+        setUpRecentWindows()
+        appActivated(NSWorkspace.shared.frontmostApplication.map(Self.identity))
         keys.onKey = { [weak self] event in self?.handleKey(event) }
         keys.onPointer = { [weak self] in self?.pointerMoved() }
         power.onChange = { [weak self] in self?.models.reconcile() }
@@ -187,6 +192,27 @@ final class CompletionCoordinator {
             refresh?.cancel()
             leaveField()
             tracker.stop()
+            recentWindows.reset()
+        }
+    }
+
+    private var readsRecentWindows: Bool {
+        preferences.screenContextEnabled && preferences.recentWindowEnabled
+    }
+
+    private func setUpRecentWindows() {
+        recentWindows.isEnabled = { [weak self] in
+            guard let self else { return false }
+            return self.readsRecentWindows && self.isOnEverywhere
+        }
+        recentWindows.mayRead = { [weak self] app in
+            guard let self, app.pid != ProcessInfo.processInfo.processIdentifier,
+                  !self.appState.isPaused(bundleID: app.bundleID) else { return false }
+            return WindowSourceRules.allowsApp(app.bundleID, rule: self.services.appRules.effectiveRule(for: app.bundleID))
+        }
+        recentWindows.allowsPages = { [weak self] app, urls in
+            guard let self else { return false }
+            return WindowSourceRules.allowsPages(urls, in: app.bundleID) { self.services.appRules.rule(for: $0) }
         }
     }
 
@@ -194,13 +220,18 @@ final class CompletionCoordinator {
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] notification in
-            let pid = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
-            MainActor.assumeIsolated { self?.appActivated(pid) }
+            let app = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication).map(Self.identity)
+            MainActor.assumeIsolated { self?.appActivated(app) }
         }
     }
 
-    private func appActivated(_ pid: pid_t?) {
-        guard let field, pid != field.app.pid else { return }
+    nonisolated private static func identity(_ app: NSRunningApplication) -> AppIdentity {
+        AppIdentity(bundleID: app.bundleIdentifier ?? "", name: app.localizedName ?? "", pid: app.processIdentifier)
+    }
+
+    private func appActivated(_ app: AppIdentity?) {
+        if let app, isOnEverywhere { recentWindows.entered(app) }
+        guard let field, app?.pid != field.app.pid else { return }
         fieldAppLeft()
     }
 
@@ -262,6 +293,7 @@ final class CompletionCoordinator {
 
     private func focusMoved(to snapshot: FieldSnapshot) {
         leaveField()
+        recentWindows.entered(snapshot.app)
         field = snapshot
         appState.lastFieldApp = snapshot.app
         recorder.begin(snapshot)
@@ -679,6 +711,7 @@ final class CompletionCoordinator {
             examples: context.examples,
             clipboard: context.clipboard,
             screenText: context.screenText,
+            recentWindow: context.recentWindow,
             textBefore: snapshot.textBefore,
             textAfter: snapshot.isMidLine ? snapshot.textAfter : "",
             mode: mode == .draft ? .draft : .inline,
@@ -753,20 +786,21 @@ final class CompletionCoordinator {
             snapshot: snapshot,
             exampleLimit: Self.exampleLimits[preferences.personalizationStrength],
             includeScreen: preferences.screenContextEnabled && rule.screenContextEnabled != false,
+            includeRecentWindow: readsRecentWindows,
             allowOCR: preferences.ocrEnabled && appState.screenRecordingGranted,
             clipboard: preferences.clipboardContextEnabled ? ClipboardReader.recentText(maxAge: 120, maxCharacters: 1500) : nil,
             sessionKey: recorder.key
         )
         charactersSinceExamples = 0
-        let task = Task { [memory = services.memory, screen] in
-            await request.load(memory: memory, screen: screen)
+        let task = Task { [memory = services.memory, screen, recentWindows, builder = models.builder] in
+            await request.load(memory: memory, screen: screen, recentWindows: recentWindows, builder: builder)
         }
         contextTask = task
         Task { [weak self] in
             let loaded = await task.value
             guard let self, self.contextTask == task else { return }
             self.context = loaded
-            Self.log.info("Context loaded: screen \(loaded.screenText?.count ?? 0, privacy: .public) chars, \(loaded.examples.count, privacy: .public) examples")
+            Self.log.info("Context loaded: screen \(loaded.screenText?.count ?? 0, privacy: .public) chars, left window \(loaded.recentWindow?.text.count ?? 0, privacy: .public) chars, \(loaded.examples.count, privacy: .public) examples")
             if let current = self.field {
                 self.prewarm(current, context: loaded)
             }
