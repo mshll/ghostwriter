@@ -231,6 +231,15 @@ import Testing
         #expect(abs(inset(rtl) - 5) < 0.01)
     }
 
+    @Test func insetFromAFullLineEndingInAHangingSpace() {
+        let text = "Please update your calendars and"
+        var line = snapshot(before: "Hello.\n" + text + " ", lineTail: text, field: tallField)
+        let textEnd = line.caretRect.minX
+        line.caretRect.origin.x += 0.9
+        line.visibleTextEnd = textEnd
+        #expect(abs(inset(line) - 5) < 0.01)
+    }
+
     @Test(arguments: [WritingDirection.leftToRight, .rightToLeft])
     func softWrappedRestIsCutAtTheLineEnd(direction: WritingDirection) throws {
         let (before, onLine, after) = direction == .leftToRight

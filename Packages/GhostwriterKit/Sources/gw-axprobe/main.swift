@@ -28,11 +28,13 @@ enum Probe {
         case "focus" where arguments.count >= 3:
             AXTools.focus(bundleID: arguments[1], domID: arguments[2], caret: arguments.dropFirst(3).first.flatMap(Int.init))
             return
+        case "sweep":
+            Sweep.run(Array(arguments.dropFirst()))
         case "select" where arguments.count >= 2:
             AXTools.select(location: Int(arguments[1]) ?? 0, length: arguments.dropFirst(2).first.flatMap(Int.init) ?? 0)
             return
         default:
-            print("usage: gw-axprobe [watch [seconds] | bench <count> [delay] | cost <count> [watch seconds] | dump | focus <bundleID> <domID> [caret] | select <loc> [len]]")
+            print("usage: gw-axprobe [watch [seconds] | bench <count> [delay] | cost <count> [watch seconds] | dump | focus <bundleID> <domID> [caret] | select <loc> [len] | sweep [--truth] [--settle s] [here|end|<pos> ...]]")
             return
         }
         let app = NSApplication.shared

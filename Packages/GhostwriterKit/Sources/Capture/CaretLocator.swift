@@ -4,8 +4,8 @@ import Foundation
 import GWCore
 
 final class CaretCalibration {
-    /// Bundle ID -> whether `AXBoundsForRange` of a zero-length range sits one line above the caret (TextEdit does this).
-    var collapsedRangeIsLineAbove: [String: Bool] = [:]
+    /// Whether `AXBoundsForRange` of a zero-length range sits one line above the caret (TextEdit does this).
+    var collapsedRangeIsLineAbove: Bool?
 }
 
 enum CaretLocator {
@@ -18,52 +18,159 @@ enum CaretLocator {
     /// it is returned as is (callers compare it with the field frame) because every other source would be out of view too.
     static func caret(
         _ element: AXElement, text: ExtractedText, frame: CGRect?, style: FieldStyle, direction: WritingDirection,
-        bundleID: String, calibration: CaretCalibration
+        calibration: CaretCalibration
     ) throws(AXFailure) -> Caret {
         let before = text.characterBeforeCaret
         let after = text.after.first
+        let rightToLeft = (before.flatMap(FieldClassifier.direction(of:)) ?? direction) == .rightToLeft
         var caretMarker: AXTextMarker?
         switch text.location {
         case .range(let selection):
             let caret = selection.location + selection.length
-            if let before, !before.isNewline, caret >= before.utf16.count,
-               let rect = try bounds(element, CFRange(location: caret - before.utf16.count, length: before.utf16.count)),
-               isSane(rect, in: frame) {
-                if calibration.collapsedRangeIsLineAbove[bundleID] == nil,
-                   let collapsed = try bounds(element, CFRange(location: caret, length: 0)) {
-                    calibration.collapsedRangeIsLineAbove[bundleID] = isLineAbove(collapsed, rect)
+            let previous = try characterBox(element, before, at: caret - (before?.utf16.count ?? 0), frame: frame)
+            let next = previous == nil || before?.isWhitespace == true
+                ? try characterBox(element, after, at: caret, frame: frame) : nil
+            if let previous, let before {
+                if let next, let after, !onSameLine(previous, next),
+                   let line = try caretLine(
+                       element, at: caret, text: text, frame: frame, style: style, rightToLeft: rightToLeft,
+                       calibration: calibration
+                   ),
+                   isOnNextLine(line, previous: previous, next: next) {
+                    return Caret(rect: edge(of: next, after, trailing: false, direction: direction), source: .nextCharacter)
                 }
-                let rightToLeft = (FieldClassifier.direction(of: before) ?? direction) == .rightToLeft
-                return Caret(rect: line(at: rightToLeft ? rect.minX : rect.maxX, rect), source: .previousCharacter)
+                return Caret(rect: edge(of: previous, before, trailing: true, direction: direction), source: .previousCharacter)
             }
-            if let after, !after.isNewline,
-               let rect = try bounds(element, CFRange(location: caret, length: after.utf16.count)), isSane(rect, in: frame) {
-                let rightToLeft = (FieldClassifier.direction(of: after) ?? direction) == .rightToLeft
-                return Caret(rect: line(at: rightToLeft ? rect.maxX : rect.minX, rect), source: .nextCharacter)
+            if let next, let after {
+                return Caret(rect: edge(of: next, after, trailing: false, direction: direction), source: .nextCharacter)
             }
-            if var rect = try bounds(element, CFRange(location: caret, length: 0)) {
-                if calibration.collapsedRangeIsLineAbove[bundleID] == true { rect.origin.y += rect.height }
-                if isSane(rect, in: frame) {
-                    return Caret(rect: line(at: rect.minX, rect), source: .collapsedRange)
-                }
-            }
-            if let selection = AXDecode.markerRange(try element.value(kAXSelectedTextMarkerRangeAttribute)) {
-                caretMarker = AXTextMarkerRangeCopyEndMarker(selection)
-            }
+            caretMarker = try selectionEndMarker(element)
+            if let caret = try collapsedCaret(
+                element, at: caret, marker: caretMarker, text: text, frame: frame, style: style, rightToLeft: rightToLeft,
+                calibration: calibration
+            ) { return caret }
         case .markers(_, let selectionEnd):
             caretMarker = selectionEnd
+            if let caret = try collapsedMarkerCaret(element, at: selectionEnd, frame: frame, style: style, rightToLeft: rightToLeft) {
+                return caret
+            }
         }
-        let rightToLeft = (before.flatMap(FieldClassifier.direction(of:)) ?? direction) == .rightToLeft
-        if let caretMarker,
-           let caret = try markerCaret(element, at: caretMarker, frame: frame, style: style, rightToLeft: rightToLeft) {
+        if let caretMarker, let caret = try previousMarkerCaret(element, at: caretMarker, frame: frame, rightToLeft: rightToLeft) {
             return caret
         }
         return estimate(frame, style: style, rightToLeft: direction == .rightToLeft)
     }
 
-    private static func isLineAbove(_ collapsed: CGRect, _ previousCharacter: CGRect) -> Bool {
-        collapsed.height > 0 && abs(collapsed.maxY - previousCharacter.minY) < 1
-            && abs(collapsed.minY - previousCharacter.minY) >= 1
+    /// The trailing edge of the last character before the spaces that end the text before the caret, on the caret's line.
+    static func visibleTextEnd(
+        _ element: AXElement, text: ExtractedText, caret: CGRect, frame: CGRect?, direction: WritingDirection
+    ) throws(AXFailure) -> CGFloat? {
+        guard case .range(let selection) = text.location, text.selected.isEmpty else { return nil }
+        let spaces = text.before.reversed().prefix { $0.isWhitespace && !$0.isNewline }
+        guard !spaces.isEmpty, let character = text.before.dropLast(spaces.count).last, !character.isNewline else {
+            return nil
+        }
+        let location = selection.location - spaces.reduce(0) { $0 + $1.utf16.count } - character.utf16.count
+        guard let box = try characterBox(element, character, at: location, frame: frame), onSameLine(box, caret) else {
+            return nil
+        }
+        return edge(of: box, character, trailing: true, direction: direction).minX
+    }
+
+    private static func characterBox(
+        _ element: AXElement, _ character: Character?, at location: Int, frame: CGRect?
+    ) throws(AXFailure) -> CGRect? {
+        guard let character, !character.isNewline, location >= 0,
+              let rect = try bounds(element, CFRange(location: location, length: character.utf16.count)),
+              isSane(rect, in: frame) else { return nil }
+        return rect
+    }
+
+    private static func edge(of box: CGRect, _ character: Character, trailing: Bool, direction: WritingDirection) -> CGRect {
+        let rightToLeft = (FieldClassifier.direction(of: character) ?? direction) == .rightToLeft
+        return line(at: rightToLeft == trailing ? box.minX : box.maxX, box)
+    }
+
+    /// At a soft wrap the characters on either side of the caret sit on different lines.
+    static func onSameLine(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.midY - b.midY) < min(a.height, b.height) / 2
+    }
+
+    static func isOnNextLine(_ caretLine: CGRect, previous: CGRect, next: CGRect) -> Bool {
+        onSameLine(caretLine, next) && !onSameLine(caretLine, previous)
+    }
+
+    /// The line the app draws the caret on. At a soft wrap the same offset is the end of one line or the start of the
+    /// next, by the caret's affinity. Chromium answers a collapsed marker at the next line's start whatever the affinity;
+    /// its line range follows it.
+    private static func caretLine(
+        _ element: AXElement, at caret: Int, text: ExtractedText, frame: CGRect?, style: FieldStyle, rightToLeft: Bool,
+        calibration: CaretCalibration
+    ) throws(AXFailure) -> CGRect? {
+        let marker = try selectionEndMarker(element)
+        if let marker,
+           let range = AXDecode.markerRange(try element.parameterized(
+               kAXLineTextMarkerRangeForTextMarkerParameterizedAttribute, marker
+           )),
+           let rect = AXDecode.rect(try element.parameterized(kAXBoundsForTextMarkerRangeParameterizedAttribute, range)),
+           rect.minY.isFinite, rect.height > 0 {
+            return rect
+        }
+        return try collapsedCaret(
+            element, at: caret, marker: marker, text: text, frame: frame, style: style, rightToLeft: rightToLeft,
+            calibration: calibration
+        )?.rect
+    }
+
+    /// Where the app itself puts a caret with nothing selected: the collapsed text marker, else the zero-length range.
+    private static func collapsedCaret(
+        _ element: AXElement, at caret: Int, marker: AXTextMarker?, text: ExtractedText, frame: CGRect?, style: FieldStyle,
+        rightToLeft: Bool, calibration: CaretCalibration
+    ) throws(AXFailure) -> Caret? {
+        if let marker,
+           let caret = try collapsedMarkerCaret(element, at: marker, frame: frame, style: style, rightToLeft: rightToLeft) {
+            return caret
+        }
+        guard var rect = try bounds(element, CFRange(location: caret, length: 0)) else { return nil }
+        if try collapsedRangeIsLineAbove(element, text: text, caret: caret, frame: frame, calibration: calibration) {
+            rect.origin.y += rect.height
+        }
+        return isSane(rect, in: frame) ? Caret(rect: line(at: rect.minX, rect), source: .collapsedRange) : nil
+    }
+
+    /// Learned once per field from a character's own box: on an empty line the neighbours are line breaks, whose boxes
+    /// sit on different lines in different apps. Text of line breaks only has no such box, so the first line's
+    /// collapsed range is held against the field's top edge.
+    private static func collapsedRangeIsLineAbove(
+        _ element: AXElement, text: ExtractedText, caret: Int, frame: CGRect?, calibration: CaretCalibration
+    ) throws(AXFailure) -> Bool {
+        if let known = calibration.collapsedRangeIsLineAbove { return known }
+        guard let anchor = anchor(before: text.before + text.selected, after: text.after, caret: caret) else {
+            guard let frame, let first = try bounds(element, CFRange(location: 0, length: 0)) else { return false }
+            return isLineAbove(first, CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: 0))
+        }
+        guard let box = try bounds(element, anchor), isSane(box, in: frame),
+              let collapsed = try bounds(element, CFRange(location: anchor.location, length: 0))
+        else { return false }
+        let lineAbove = isLineAbove(collapsed, box)
+        calibration.collapsedRangeIsLineAbove = lineAbove
+        return lineAbove
+    }
+
+    /// The character nearest the caret that is not a line break, as a UTF-16 range.
+    static func anchor(before: String, after: String, caret: Int) -> CFRange? {
+        if let index = before.lastIndex(where: { !$0.isNewline }) {
+            return CFRange(location: caret - before[index...].utf16.count, length: before[index].utf16.count)
+        }
+        if let index = after.firstIndex(where: { !$0.isNewline }) {
+            return CFRange(location: caret + after[..<index].utf16.count, length: after[index].utf16.count)
+        }
+        return nil
+    }
+
+    static func isLineAbove(_ collapsed: CGRect, _ character: CGRect) -> Bool {
+        collapsed.height > 0 && abs(collapsed.maxY - character.minY) < 1
+            && abs(collapsed.minY - character.minY) >= 1
     }
 
     static func style(_ element: AXElement, text: ExtractedText) throws(AXFailure) -> FieldStyle {
@@ -96,23 +203,29 @@ enum CaretLocator {
         )
     }
 
-    private static func markerCaret(
+    private static func collapsedMarkerCaret(
         _ element: AXElement, at marker: AXTextMarker, frame: CGRect?, style: FieldStyle, rightToLeft: Bool
     ) throws(AXFailure) -> Caret? {
-        if let rect = try markerBounds(element, from: marker, to: marker) {
-            if isSane(rect, in: frame) {
-                return Caret(rect: line(at: rect.minX, rect), source: .textMarker)
-            }
-            if let caret = emptyLineCaret(rect, in: frame, style: style, rightToLeft: rightToLeft) {
-                return Caret(rect: caret, source: .textMarker)
-            }
+        guard let rect = try markerBounds(element, from: marker, to: marker) else { return nil }
+        if isSane(rect, in: frame) {
+            return Caret(rect: line(at: rect.minX, rect), source: .textMarker)
         }
+        return emptyLineCaret(rect, in: frame, style: style, rightToLeft: rightToLeft).map { Caret(rect: $0, source: .textMarker) }
+    }
+
+    private static func previousMarkerCaret(
+        _ element: AXElement, at marker: AXTextMarker, frame: CGRect?, rightToLeft: Bool
+    ) throws(AXFailure) -> Caret? {
         guard let previous = AXDecode.marker(try element.parameterized(
                   kAXPreviousTextMarkerForTextMarkerParameterizedAttribute, marker
               )),
               let rect = try markerBounds(element, from: previous, to: marker), isSane(rect, in: frame)
         else { return nil }
         return Caret(rect: line(at: rightToLeft ? rect.minX : rect.maxX, rect), source: .textMarker)
+    }
+
+    private static func selectionEndMarker(_ element: AXElement) throws(AXFailure) -> AXTextMarker? {
+        AXDecode.markerRange(try element.value(kAXSelectedTextMarkerRangeAttribute)).map(AXTextMarkerRangeCopyEndMarker)
     }
 
     /// Chromium answers a collapsed range on an empty line with that line's box, which spans the field's width. On an
