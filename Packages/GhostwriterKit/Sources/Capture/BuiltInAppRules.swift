@@ -21,6 +21,11 @@ public enum BuiltInAppRules {
         return domainRules.first { DomainPattern.matches($0.pattern, host: host) }?.rule
     }
 
+    public static func domainRule(for url: URL) -> AppRule? {
+        guard !AppCatalog.isAIPage(url), let host = url.host() else { return nil }
+        return domainRule(forHost: host)
+    }
+
     private static let appRules: [String: AppRule] = {
         var rules: [String: AppRule] = [:]
         func add(_ ids: some Sequence<String>, _ make: (String) -> AppRule) {
@@ -39,10 +44,7 @@ public enum BuiltInAppRules {
     }()
 
     private static let domainRules: [(pattern: String, rule: AppRule)] = {
-        let searchEngines = [
-            "figma.com", "google.*", "google.co.uk", "google.co.jp", "google.co.in", "google.com.au",
-            "google.com.br", "google.com.mx", "bing.*", "duckduckgo.com", "kagi.com",
-        ]
+        let searchEngines = ["figma.com"] + AppCatalog.googleHosts + ["bing.*", "duckduckgo.com", "kagi.com"]
         let pasteHosts = ["docs.google.com", "*.sharepoint.com", "*.atlassian.net"]
         return searchEngines.map { ($0, AppRule(bundleID: "domain:\($0)", completionsEnabled: false)) }
             + pasteHosts.map { ($0, AppRule(bundleID: "domain:\($0)", insertionMode: .paste)) }
@@ -184,6 +186,18 @@ enum AppCatalog {
     static let aiApps: Set<String> = [
         "com.openai.chat", "com.anthropic.claudefordesktop", "com.google.GeminiMacOS", "ai.perplexity.mac",
     ]
+
+    static let googleHosts = [
+        "google.*", "google.co.uk", "google.co.jp", "google.co.in", "google.com.au", "google.com.br", "google.com.mx",
+    ]
+
+    /// A search engine page that holds a chat prompt rather than a search box: Google's AI Mode.
+    static func isAIPage(_ url: URL) -> Bool {
+        guard let host = url.host().map(DomainPattern.normalize), DomainPattern.matchesAny(googleHosts, host: host),
+              url.path() == "/search" else { return false }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .contains { $0.name == "udm" && $0.value == "50" } ?? false
+    }
 
     static let aiHosts = [
         "chatgpt.com", "chat.openai.com", "claude.ai", "gemini.google.com", "perplexity.ai", "chat.mistral.ai",

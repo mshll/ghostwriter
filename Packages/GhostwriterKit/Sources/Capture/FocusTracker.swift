@@ -317,7 +317,7 @@ public final class FocusTracker {
         guard let url = snapshot.url, url.scheme == "http" || url.scheme == "https",
               let host = url.host().map(DomainPattern.normalize) else { return nil }
         let key = "domain:\(host)"
-        let rule = (BuiltInAppRules.domainRule(forHost: host) ?? AppRule(bundleID: key)).merged(with: ruleProvider?(key))
+        let rule = (BuiltInAppRules.domainRule(for: url) ?? AppRule(bundleID: key)).merged(with: ruleProvider?(key))
         return rule.completionsEnabled == false ? .excludedSite : nil
     }
 

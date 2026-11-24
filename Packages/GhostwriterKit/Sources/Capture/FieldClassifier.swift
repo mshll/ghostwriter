@@ -8,7 +8,7 @@ enum FieldClassifier {
         var role: String
         var label: String?
         var domIdentifier: String?
-        var host: String?
+        var url: URL?
         var isWeb: Bool
         var isTerminal: Bool
         var isCodeEditor: Bool
@@ -17,7 +17,7 @@ enum FieldClassifier {
 
     static func kind(_ input: Input) -> FieldKind {
         let id = input.bundleID
-        let host = input.host
+        let host = input.url?.host().map(DomainPattern.normalize)
         func hostIn(_ patterns: [String]) -> Bool {
             host.map { DomainPattern.matchesAny(patterns, host: $0) } ?? false
         }
@@ -26,7 +26,9 @@ enum FieldClassifier {
         if input.isAgentComposer { return .aiPrompt }
         if input.isCodeEditor { return .code }
         if looksLikeSearch(input) { return .search }
-        if AppCatalog.aiApps.contains(id) || hostIn(AppCatalog.aiHosts) { return .aiPrompt }
+        if AppCatalog.aiApps.contains(id) || hostIn(AppCatalog.aiHosts) || input.url.map(AppCatalog.isAIPage) == true {
+            return .aiPrompt
+        }
         if AppCatalog.mailApps.contains(id) || hostIn(AppCatalog.mailHosts) { return .email }
         if AppCatalog.chatApps.contains(id) || hostIn(AppCatalog.chatHosts) { return .chat }
         if AppCatalog.documentApps.contains(id) || hostIn(AppCatalog.documentHosts) { return .document }
