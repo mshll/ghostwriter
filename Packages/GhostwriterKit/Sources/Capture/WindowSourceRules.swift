@@ -2,12 +2,13 @@ import Foundation
 import GWCore
 
 /// Which windows may lend their text to suggestions in another window: the apps and sites whose window text
-/// Ghostwriter reads while the user types in them, minus terminals, whose text is read only as an agent's transcript.
+/// Ghostwriter reads while the user types in them, minus terminals and code editors whose suggestions are off.
 public enum WindowSourceRules {
     /// `rule` is the app's effective rule, with the built-in rule and the app scope applied.
     public static func allowsApp(_ bundleID: String, rule: AppRule) -> Bool {
         if AppCatalog.passwordManagers.contains(bundleID) || AppCatalog.terminals.contains(bundleID) { return false }
-        if AppCatalog.isCodeEditor(bundleID), rule.codeEditorCompletions != true { return false }
+        let isEditor = AppCatalog.isCodeEditor(bundleID) || AppCatalog.vsCodeForks.contains(bundleID)
+        if isEditor, rule.codeEditorCompletions != true { return false }
         return rule.completionsEnabled != false && rule.screenContextEnabled != false
     }
 

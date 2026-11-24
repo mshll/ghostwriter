@@ -39,7 +39,7 @@ enum AXWindowReader {
         }
     }
 
-    /// Reads `window` from its top, with its title and page addresses, without skipping a focused element.
+    /// Reads `window` from its top, with its title and page addresses. Single-line fields are left out.
     static func scan(_ window: WindowHandle, budget: AXScanBudget = AXScanBudget()) async -> AXWindowScan? {
         await withCheckedContinuation { continuation in
             leftWindowQueue.async {
@@ -175,6 +175,8 @@ private struct Walker {
                 if clippingRoles.contains(info.role) { clip = clip.isEmpty ? frame : clip.intersection(frame) }
             }
 
+            // A left window has no field in use; its single-line fields hold form entries such as card numbers.
+            if anchorsAtTop, info.role == kAXTextFieldRole { continue }
             if let text = info.value, info.role == kAXStaticTextRole || textInputRoles.contains(info.role) {
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty, trimmed != fieldText, let frame = info.frame {

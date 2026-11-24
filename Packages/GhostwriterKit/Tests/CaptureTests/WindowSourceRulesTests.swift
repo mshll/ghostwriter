@@ -24,6 +24,8 @@ import Testing
         #expect(!WindowSourceRules.allowsApp("com.apple.dt.Xcode", rule: AppRule(bundleID: "com.apple.dt.Xcode")))
         let on = AppRule(bundleID: "com.apple.dt.Xcode", codeEditorCompletions: true)
         #expect(WindowSourceRules.allowsApp("com.apple.dt.Xcode", rule: on))
+        #expect(!WindowSourceRules.allowsApp("com.microsoft.VSCode", rule: AppRule(bundleID: "com.microsoft.VSCode")))
+        #expect(!WindowSourceRules.allowsApp(AppCatalog.orca, rule: AppRule(bundleID: AppCatalog.orca)))
     }
 }
 
