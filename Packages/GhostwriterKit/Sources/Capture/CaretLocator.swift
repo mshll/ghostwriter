@@ -61,6 +61,22 @@ enum CaretLocator {
         return estimate(frame, style: style, rightToLeft: direction == .rightToLeft)
     }
 
+    /// The trailing edge of the last character before the spaces that end the text before the caret, on the caret's line.
+    static func visibleTextEnd(
+        _ element: AXElement, text: ExtractedText, caret: CGRect, frame: CGRect?, direction: WritingDirection
+    ) throws(AXFailure) -> CGFloat? {
+        guard case .range(let selection) = text.location, text.selected.isEmpty else { return nil }
+        let spaces = text.before.reversed().prefix { $0.isWhitespace && !$0.isNewline }
+        guard !spaces.isEmpty, let character = text.before.dropLast(spaces.count).last, !character.isNewline else {
+            return nil
+        }
+        let location = selection.location - spaces.reduce(0) { $0 + $1.utf16.count } - character.utf16.count
+        guard let box = try characterBox(element, character, at: location, frame: frame), onSameLine(box, caret) else {
+            return nil
+        }
+        return edge(of: box, character, trailing: true, direction: direction).minX
+    }
+
     private static func characterBox(
         _ element: AXElement, _ character: Character?, at location: Int, frame: CGRect?
     ) throws(AXFailure) -> CGRect? {

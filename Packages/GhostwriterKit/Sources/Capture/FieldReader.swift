@@ -219,6 +219,9 @@ struct FieldReader {
             element, text: text, frame: frame, style: style, direction: direction, calibration: context.calibration
         )
         diagnostics.caretSource = caret.source
+        let visibleTextEnd = try CaretLocator.visibleTextEnd(
+            element, text: text, caret: caret.rect, frame: frame, direction: direction
+        )
         if style.fontName == nil, let size = style.fontSize {
             style.fontName = try matchedFont(context, text: text, size: size, style: style)
         }
@@ -238,7 +241,8 @@ struct FieldReader {
             windowTitle: context.windowTitle,
             url: context.url,
             language: context.language,
-            caretIsEstimated: caret.source == .estimate
+            caretIsEstimated: caret.source == .estimate,
+            visibleTextEnd: visibleTextEnd
         ))
     }
 
