@@ -59,6 +59,11 @@ import Testing
         #expect(allows([try url("https://www.google.com/search?q=tent&udm=50")]))
     }
 
+    @Test func readsALocalFileInABrowser() throws {
+        #expect(allows([try url("file:///Users/me/notes/product.html")]))
+        #expect(allows([try url("file:///Users/me/notes/product.html")], in: "com.google.Chrome"))
+    }
+
     @Test func skipsBrowserWindowsWithoutAWebPage() throws {
         #expect(!allows([]))
         #expect(!allows([try url("about:blank")]))

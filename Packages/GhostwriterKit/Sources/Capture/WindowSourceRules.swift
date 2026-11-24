@@ -12,13 +12,13 @@ public enum WindowSourceRules {
         return rule.completionsEnabled != false && rule.screenContextEnabled != false
     }
 
-    /// `userRule` returns the user's rule for a `domain:<host>` key. A browser window without a web address is
-    /// refused: its site rules cannot be checked.
+    /// `userRule` returns the user's rule for a `domain:<host>` key. A browser window showing neither a web
+    /// page nor a local file is refused: what it shows cannot be checked.
     public static func allowsPages(_ urls: [URL], in bundleID: String, userRule: (String) -> AppRule?) -> Bool {
         let isBrowser = AppCatalog.browsers.contains(bundleID)
         if urls.contains(where: { !PageScheme.isReadable($0, inBrowser: isBrowser) }) { return false }
         let pages = webPages(urls)
-        if isBrowser, pages.isEmpty { return false }
+        if isBrowser, pages.isEmpty, !urls.contains(where: \.isFileURL) { return false }
         return pages.allSatisfy { url, host in
             let key = "domain:\(host)"
             let rule = (BuiltInAppRules.domainRule(for: url) ?? AppRule(bundleID: key)).merged(with: userRule(key))
