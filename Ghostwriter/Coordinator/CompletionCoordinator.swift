@@ -102,6 +102,7 @@ final class CompletionCoordinator {
         tracker.onEvent = { [weak self] event in self?.handle(event) }
         tracker.onFocusedWindowChange = { [weak self] app in self?.recentWindows.entered(app) }
         setUpRecentWindows()
+        appActivated(NSWorkspace.shared.frontmostApplication.map(Self.identity))
         keys.onKey = { [weak self] event in self?.handleKey(event) }
         keys.onPointer = { [weak self] in self?.pointerMoved() }
         power.onChange = { [weak self] in self?.models.reconcile() }
@@ -219,11 +220,13 @@ final class CompletionCoordinator {
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] notification in
-            let app = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication).map {
-                AppIdentity(bundleID: $0.bundleIdentifier ?? "", name: $0.localizedName ?? "", pid: $0.processIdentifier)
-            }
+            let app = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication).map(Self.identity)
             MainActor.assumeIsolated { self?.appActivated(app) }
         }
+    }
+
+    nonisolated private static func identity(_ app: NSRunningApplication) -> AppIdentity {
+        AppIdentity(bundleID: app.bundleIdentifier ?? "", name: app.localizedName ?? "", pid: app.processIdentifier)
     }
 
     private func appActivated(_ app: AppIdentity?) {
