@@ -3,6 +3,22 @@
     <channel>
         <title>Ghostwriter</title>
         <item>
+            <title>1.3.0</title>
+            <pubDate>Tue, 24 Nov 2026 04:53:22 +0300</pubDate>
+            <sparkle:version>202611240149</sparkle:version>
+            <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <sparkle:releaseNotesLink>https://mshll.github.io/ghostwriter/Ghostwriter-1.3.0.md</sparkle:releaseNotesLink>
+            <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter-1.3.0.dmg" length="17683115" type="application/octet-stream" sparkle:edSignature="NY0EMPIYHeMg+kxtZK2X8CXcTCUA2eh7t0OVL/gzo4nFea2Il2msKXxWW37AFisrwPYp8OhMS6v9mrm3x+TGDw=="/>
+            <sparkle:deltas>
+                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611240149-202611172053.delta" sparkle:deltaFrom="202611172053" length="2284146" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="xAapG7blK2sIu928ZTQtO2/nrYpt+Z5vq0Of3kFN1GVkJkQmkojV8NxiogIWkL9YePArRb4GSkFUSJnMMWK6AQ=="/>
+                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611240149-202611151105.delta" sparkle:deltaFrom="202611151105" length="2403682" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="meLo+2q3twR0F0MntLRaXGILFcGefuUgFm0JMuMP2mUuArO69dsK1McmjxFulOPQMA31u/ih9V6BpXUmNc5LCA=="/>
+                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611240149-202611131430.delta" sparkle:deltaFrom="202611131430" length="2457186" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="UOJRrDV3ezr5nRa7nEppUlCbxI35/kjoSqPP3dalH9zY2PU9innmPsMhxQIWvZkK9vp/pePyFM+FuNqEkViTBA=="/>
+                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611240149-202611031209.delta" sparkle:deltaFrom="202611031209" length="2889638" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="gBz8p8dOTuTVppWW/TvXTqS/zCLvT4XoM2x8MYt7+HzmJtAMDGAmz01VV1pcIz7xzgKkbYag3sYSOqyMV3UwDg=="/>
+                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611240149-202610181601.delta" sparkle:deltaFrom="202610181601" length="2891382" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="SMcex5YE9VL1lgi3DRcHLhLCTnngGasWC4GAQkT6dYNiJ/bwRFBYtCDxcu+LekSr0l3E3RTRTTJNvIP7JVKDBg=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>1.2.0</title>
             <pubDate>Tue, 17 Nov 2026 23:57:08 +0300</pubDate>
             <sparkle:version>202611172053</sparkle:version>
@@ -29,19 +45,6 @@
                 <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611151105-202611131430.delta" sparkle:deltaFrom="202611131430" length="751718" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="NBC+FagM++5msPVV3rWrRWGGno4tOZrvZY9IcajnCbfsUyY4W4Q/u/Q/otEfxqEjZWgg1NIZIUupZ7cmWdwcCA=="/>
                 <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611151105-202611031209.delta" sparkle:deltaFrom="202611031209" length="1394918" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="W9Bh+1JGn75XRHMm+MJPW8W1hbF0frogJJPtiAyGsQr4L2jyjETn9A0vMNtxby/0/Ek5AIwBzaIaqBRTybsaBw=="/>
                 <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611151105-202610181601.delta" sparkle:deltaFrom="202610181601" length="1395630" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="gO/99i98WXDcc96fe19csIr2m/EqW+j3g/x0swauOhpKlOVecqMdlESHMcktmb7l98Hky7Rd6e84WpAjY2lGBg=="/>
-            </sparkle:deltas>
-        </item>
-        <item>
-            <title>1.1.0</title>
-            <pubDate>Fri, 13 Nov 2026 17:34:45 +0300</pubDate>
-            <sparkle:version>202611131430</sparkle:version>
-            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://mshll.github.io/ghostwriter/Ghostwriter-1.1.0.md</sparkle:releaseNotesLink>
-            <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter-1.1.0.dmg" length="15959098" type="application/octet-stream" sparkle:edSignature="mySnr6CX5RtSwYij1LhlDaXbbZV5JVjaIPgJ1+lZIIautCWl4hyBzml92ZiTlTza1tgaQ3zv8MQ3Cj5zrCRfDw=="/>
-            <sparkle:deltas>
-                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611131430-202611031209.delta" sparkle:deltaFrom="202611031209" length="1347266" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="qabupr5vHKlHT4YYGKCXiQlAQsQdOBYXK8cPy5zddLlASBS7kRW71G4q14JnUD5tLHhS+icNGT0xaBQidQ0kBQ=="/>
-                <enclosure url="https://mshll.github.io/ghostwriter/Ghostwriter202611131430-202610181601.delta" sparkle:deltaFrom="202610181601" length="1364490" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="976464" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="cAcQo7LFpK4g0YtVUVG/onu419O5chMoYQqj5e+uRYXKxfzztVtXa/r43gylr2EBiO3nU81377tRjQ1B6nDQAQ=="/>
             </sparkle:deltas>
         </item>
     </channel>
