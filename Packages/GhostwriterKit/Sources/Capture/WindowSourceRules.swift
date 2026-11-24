@@ -16,24 +16,25 @@ public enum WindowSourceRules {
     public static func allowsPages(_ urls: [URL], in bundleID: String, userRule: (String) -> AppRule?) -> Bool {
         let isBrowser = AppCatalog.browsers.contains(bundleID)
         if urls.contains(where: { !PageScheme.isReadable($0, inBrowser: isBrowser) }) { return false }
-        let hosts = webHosts(urls)
-        if isBrowser, hosts.isEmpty { return false }
-        return hosts.allSatisfy { host in
+        let pages = webPages(urls)
+        if isBrowser, pages.isEmpty { return false }
+        return pages.allSatisfy { url, host in
             let key = "domain:\(host)"
-            let rule = (BuiltInAppRules.domainRule(forHost: host) ?? AppRule(bundleID: key)).merged(with: userRule(key))
+            let rule = (BuiltInAppRules.domainRule(for: url) ?? AppRule(bundleID: key)).merged(with: userRule(key))
             return rule.completionsEnabled != false && rule.screenContextEnabled != false
         }
     }
 
     /// The site a browser window shows; nil for other apps.
     public static func host(of urls: [URL], in bundleID: String) -> String? {
-        AppCatalog.browsers.contains(bundleID) ? webHosts(urls).first : nil
+        AppCatalog.browsers.contains(bundleID) ? webPages(urls).first?.host : nil
     }
 
-    private static func webHosts(_ urls: [URL]) -> [String] {
+    private static func webPages(_ urls: [URL]) -> [(url: URL, host: String)] {
         urls.compactMap { url in
-            guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
-            return url.host().map(DomainPattern.normalize)
+            guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+                  let host = url.host().map(DomainPattern.normalize) else { return nil }
+            return (url, host)
         }
     }
 }

@@ -53,6 +53,10 @@ import Testing
         #expect(!allows([page], userRules: ["domain:shop.example": noWindowText]))
     }
 
+    @Test func readsAPageThatAnExcludedSiteServesAsAChat() throws {
+        #expect(allows([try url("https://www.google.com/search?q=tent&udm=50")]))
+    }
+
     @Test func skipsBrowserWindowsWithoutAWebPage() throws {
         #expect(!allows([]))
         #expect(!allows([try url("about:blank")]))
