@@ -189,3 +189,17 @@ struct DatabaseEncryptionTests {
         #expect(try Data(contentsOf: url) == bytes)
     }
 }
+
+@Suite struct KeychainKeyFormatTests {
+    @Test func hexRoundTrips() {
+        let key = Data((0..<32).map { UInt8($0 * 8 % 256) })
+        let text = Data(KeychainKeyStore.hex(key).utf8)
+        #expect(text.count == 64)
+        #expect(KeychainKeyStore.bytes(fromHex: text) == key)
+    }
+
+    @Test func rejectsTextThatIsNotHex() {
+        #expect(KeychainKeyStore.bytes(fromHex: Data("abc".utf8)) == nil)
+        #expect(KeychainKeyStore.bytes(fromHex: Data("zz".utf8)) == nil)
+    }
+}

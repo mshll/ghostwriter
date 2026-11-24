@@ -45,7 +45,7 @@ enum DatabaseFile {
 
     /// The SQLCipher raw key form: 64 hex digits are used as the key as is, without a slow key derivation.
     static func passphrase(_ key: Data) -> String {
-        "x'" + key.map { String(format: "%02x", $0) }.joined() + "'"
+        "x'" + KeychainKeyStore.hex(key) + "'"
     }
 
     static func state(of path: String) throws -> State {

@@ -20,7 +20,7 @@ public enum KeychainError: LocalizedError, Equatable {
     }
 }
 
-/// A generic password in the login keychain. The data protection keychain needs entitlements from a provisioning
+/// A generic password in the login keychain, saved as hex text so `security find-generic-password -w` prints it. The data protection keychain needs entitlements from a provisioning
 /// profile, which a Developer ID app without one cannot use.
 public struct KeychainKeyStore: DatabaseKeyStore {
     let service: String
@@ -43,8 +43,8 @@ public struct KeychainKeyStore: DatabaseKeyStore {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         switch status {
         case errSecSuccess:
-            guard let data = result as? Data else { throw KeychainError.unexpectedValue }
-            return data
+            guard let data = result as? Data, let key = Self.bytes(fromHex: data) else { throw KeychainError.unexpectedValue }
+            return key
         case errSecItemNotFound:
             return nil
         default:
@@ -54,9 +54,26 @@ public struct KeychainKeyStore: DatabaseKeyStore {
 
     public func save(_ key: Data) throws {
         var item = query
-        item[kSecValueData] = key
+        item[kSecValueData] = Data(Self.hex(key).utf8)
         item[kSecAttrLabel] = "Ghostwriter database key"
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.status(status) }
+    }
+
+    static func hex(_ bytes: Data) -> String {
+        bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func bytes(fromHex text: Data) -> Data? {
+        guard text.count.isMultiple(of: 2), let string = String(data: text, encoding: .ascii) else { return nil }
+        var bytes = Data(capacity: text.count / 2)
+        var index = string.startIndex
+        while index < string.endIndex {
+            let next = string.index(index, offsetBy: 2)
+            guard let byte = UInt8(string[index..<next], radix: 16) else { return nil }
+            bytes.append(byte)
+            index = next
+        }
+        return bytes
     }
 }
