@@ -124,12 +124,18 @@ enum AXTools {
         return String(describing: value).replacingOccurrences(of: "\n", with: " ")
     }
 
-    private static func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+    static func value(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
         var value: CFTypeRef?
         return AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success ? value : nil
     }
 
-    private static func element(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+    static func parameterized(_ element: AXUIElement, _ attribute: String, _ parameter: CFTypeRef) -> CFTypeRef? {
+        var value: CFTypeRef?
+        return AXUIElementCopyParameterizedAttributeValue(element, attribute as CFString, parameter, &value) == .success
+            ? value : nil
+    }
+
+    static func element(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         value(element, attribute).flatMap(asElement)
     }
 
