@@ -78,7 +78,7 @@ enum EnvironmentLines {
         return "It is \(weekday), \(month) \(parts.day ?? 1), \(parts.year ?? 2000), around \(clockHour):\(clockMinute) \(period)."
     }
 
-    private static func singleLine(_ value: String?) -> String? {
+    static func singleLine(_ value: String?) -> String? {
         guard let value else { return nil }
         let collapsed = value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard !collapsed.isEmpty else { return nil }

@@ -64,6 +64,9 @@ public struct FieldSnapshot: Sendable, Hashable {
     /// The app reported no caret bounds: `caretRect` is a guess at the field's first line.
     public var caretIsEstimated: Bool
     public var fieldFrame: CGRect
+    /// Where the text before the caret ends, when spaces sit between it and the caret on its line. At the end of a full
+    /// line TextKit draws those spaces narrower than they are.
+    public var visibleTextEnd: CGFloat?
     public var style: FieldStyle
     public var kind: FieldKind
     public var direction: WritingDirection
@@ -90,7 +93,8 @@ public struct FieldSnapshot: Sendable, Hashable {
         url: URL? = nil,
         language: String? = nil,
         transcript: String? = nil,
-        caretIsEstimated: Bool = false
+        caretIsEstimated: Bool = false,
+        visibleTextEnd: CGFloat? = nil
     ) {
         self.id = id
         self.app = app
@@ -108,6 +112,7 @@ public struct FieldSnapshot: Sendable, Hashable {
         self.language = language
         self.transcript = transcript
         self.caretIsEstimated = caretIsEstimated
+        self.visibleTextEnd = visibleTextEnd
     }
 
     public var isMidLine: Bool {

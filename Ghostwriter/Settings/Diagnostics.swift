@@ -21,7 +21,8 @@ enum Diagnostics {
             terminal agents \(onOff(preferences.terminalAgentPrompts)), length \(preferences.completionLength.title), \
             inside text \(onOff(preferences.midLineEnabled)), drafts \(onOff(preferences.draftEnabled)), \
             typo fixes \(onOff(preferences.typoFixesEnabled)), auto-fix \(onOff(preferences.autoFixTypos)), sentence check \(onOff(preferences.sentenceTypoCheck)), emoji \(onOff(preferences.emojiEnabled))
-            Context: window text \(onOff(preferences.screenContextEnabled)), screenshots \(onOff(preferences.ocrEnabled)), \
+            Context: window text \(onOff(preferences.screenContextEnabled)), \
+            recent window \(onOff(preferences.recentWindowEnabled)), screenshots \(onOff(preferences.ocrEnabled)), \
             clipboard \(onOff(preferences.clipboardContextEnabled))
             Personalization: learning \(onOff(preferences.recordWriting)), strength \(preferences.personalizationStrength)
             Battery: on demand \(onOff(preferences.batteryOnDemandOnly)), shorter \(onOff(preferences.batteryShorterCompletions)), \

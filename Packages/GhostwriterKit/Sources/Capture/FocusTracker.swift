@@ -9,6 +9,8 @@ public final class FocusTracker {
     /// Called with a bundle ID, and with `domain:<host>` (lowercased, `www.` stripped) for web fields.
     public var ruleProvider: ((String) -> AppRule?)?
     public var onDiagnostics: ((ReadDiagnostics) -> Void)?
+    /// Called when the frontmost app reports that another of its windows took focus.
+    public var onFocusedWindowChange: ((AppIdentity) -> Void)?
     public var includesOwnApp = false {
         didSet {
             guard includesOwnApp != oldValue, isRunning else { return }
@@ -109,8 +111,9 @@ public final class FocusTracker {
         return snapshot
     }
 
-    fileprivate func accessibilityNotification() {
+    fileprivate func accessibilityNotification(_ name: String) {
         noteActivity()
+        if name == kAXFocusedWindowChangedNotification, let app = target?.identity { onFocusedWindowChange?(app) }
         requestRead()
     }
 
@@ -317,7 +320,7 @@ public final class FocusTracker {
         guard let url = snapshot.url, url.scheme == "http" || url.scheme == "https",
               let host = url.host().map(DomainPattern.normalize) else { return nil }
         let key = "domain:\(host)"
-        let rule = (BuiltInAppRules.domainRule(forHost: host) ?? AppRule(bundleID: key)).merged(with: ruleProvider?(key))
+        let rule = (BuiltInAppRules.domainRule(for: url) ?? AppRule(bundleID: key)).merged(with: ruleProvider?(key))
         return rule.completionsEnabled == false ? .excludedSite : nil
     }
 
@@ -378,8 +381,9 @@ private func observerCallback(
 ) {
     guard let refcon else { return }
     let box = UInt(bitPattern: refcon)
+    let name = notification as String
     MainActor.assumeIsolated {
         guard let pointer = UnsafeMutableRawPointer(bitPattern: box) else { return }
-        Unmanaged<ObserverBox>.fromOpaque(pointer).takeUnretainedValue().tracker?.accessibilityNotification()
+        Unmanaged<ObserverBox>.fromOpaque(pointer).takeUnretainedValue().tracker?.accessibilityNotification(name)
     }
 }

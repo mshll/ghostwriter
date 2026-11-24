@@ -264,11 +264,16 @@ enum GhostLayout {
     /// The field's text inset, estimated from where the caret's line starts: the caret's distance from the field's
     /// starting edge less the width of the text before it on that line. In a field that wraps lines, that text is the
     /// longest tail of the paragraph that starts at a line break opportunity and fits, which is where the host
-    /// soft-wrapped it. Zero when no estimate is plausible.
+    /// soft-wrapped it. Zero when no estimate is plausible. When the app reports where the text ends before trailing
+    /// spaces, that end stands in for the caret and the spaces are left out.
     static func lineStartInset(_ snapshot: FieldSnapshot, range: ClosedRange<CGFloat>, font: NSFont) -> CGFloat {
         let before = snapshot.textBefore
-        let line = String(before.lastIndex(where: \.isNewline).map { before[before.index(after: $0)...] } ?? before[...])
-        let caretX = snapshot.caretRect.minX
+        var line = String(before.lastIndex(where: \.isNewline).map { before[before.index(after: $0)...] } ?? before[...])
+        var caretX = snapshot.caretRect.minX
+        if let visibleTextEnd = snapshot.visibleTextEnd {
+            line = String(visible(line[...]))
+            caretX = visibleTextEnd
+        }
         let room = snapshot.direction == .leftToRight ? caretX - range.lowerBound : range.upperBound - caretX
         let wraps = !line.isEmpty && holdsSeveralLines(field: snapshot.fieldFrame, caret: snapshot.caretRect)
         let tolerance = max(2, room / 50)

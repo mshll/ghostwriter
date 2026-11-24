@@ -4,6 +4,23 @@ import GWCore
 public enum PromptMode: Sendable, Hashable { case inline, draft }
 
 public struct PromptContext: Sendable, Hashable {
+    /// Text from the window the user was in before this one.
+    public struct RecentWindow: Sendable, Hashable {
+        public var appName: String
+        public var title: String?
+        public var host: String?
+        public var text: String
+        /// Set by `PromptBuilder.fitted`, so building each prompt skips counting the text again.
+        public var tokens: Int?
+
+        public init(appName: String, title: String? = nil, host: String? = nil, text: String) {
+            self.appName = appName
+            self.title = title
+            self.host = host
+            self.text = text
+        }
+    }
+
     public var instructions: String?
     public var userName: String?
     public var appName: String
@@ -15,6 +32,7 @@ public struct PromptContext: Sendable, Hashable {
     public var examples: [String]
     public var clipboard: String?
     public var screenText: String?
+    public var recentWindow: RecentWindow?
     public var textBefore: String
     public var textAfter: String
     public var mode: PromptMode
@@ -29,8 +47,8 @@ public struct PromptContext: Sendable, Hashable {
         instructions: String? = nil, userName: String? = nil, appName: String, windowTitle: String? = nil,
         domain: String? = nil, fieldKind: FieldKind = .unknown, fieldLabel: String? = nil, now: Date = .now,
         examples: [String] = [], clipboard: String? = nil, screenText: String? = nil,
-        textBefore: String, textAfter: String = "", mode: PromptMode = .inline, keepsDate: Bool = false,
-        beforeAnchor: String? = nil
+        recentWindow: RecentWindow? = nil, textBefore: String, textAfter: String = "", mode: PromptMode = .inline,
+        keepsDate: Bool = false, beforeAnchor: String? = nil
     ) {
         self.instructions = instructions
         self.userName = userName
@@ -43,6 +61,7 @@ public struct PromptContext: Sendable, Hashable {
         self.examples = examples
         self.clipboard = clipboard
         self.screenText = screenText
+        self.recentWindow = recentWindow
         self.textBefore = textBefore
         self.textAfter = textAfter
         self.mode = mode
@@ -58,6 +77,7 @@ public struct PromptContext: Sendable, Hashable {
 public struct PromptBudgets: Sendable, Hashable {
     public var screen = 600
     public var clipboard = 300
+    public var recentWindow = 350
     public var examples = 400
     public var before = 350
     public var beforeSlack = 96
@@ -78,7 +98,9 @@ public struct BuiltPrompt: Sendable, Hashable {
     /// Nil when the text was kept whole or the prompt is a draft.
     public var beforeAnchor: String?
 
-    public static let stopStrings: [String] = (PromptText.labels + [PromptText.preamble]).map {
+    public static let stopStrings: [String] = (
+        PromptText.labels + [PromptText.preamble, PromptText.recentWindowLabelStart]
+    ).map {
         $0.trimmingCharacters(in: .whitespacesAndNewlines)
     } + [PromptText.separatorStop, PromptText.preambleTail] + EnvironmentLines.stopStarts
 }
