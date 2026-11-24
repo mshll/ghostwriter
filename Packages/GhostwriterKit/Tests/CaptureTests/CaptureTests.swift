@@ -386,3 +386,25 @@ import Testing
         #expect(CaretLocator.onSameLine(CGRect(x: 617, y: 254, width: 10, height: 20), CGRect(x: 625, y: 254, width: 2, height: 18)))
     }
 }
+
+@Suite struct SearchEnginePageTests {
+    @Test func googleAIModeTakesSuggestions() throws {
+        for page in ["https://www.google.com/search?udm=50", "https://www.google.de/search?q=x&udm=50&sei=1",
+                     "https://google.co.uk/search?udm=50"] {
+            let url = try #require(URL(string: page))
+            #expect(BuiltInAppRules.domainRule(for: url) == nil, "\(page)")
+            #expect(FieldClassifier.kind(.init(
+                bundleID: "com.google.Chrome", role: kAXTextAreaRole, url: url, isWeb: true, isTerminal: false,
+                isCodeEditor: false, isAgentComposer: false
+            )) == .aiPrompt, "\(page)")
+        }
+    }
+
+    @Test func googleSearchStaysOff() throws {
+        for page in ["https://www.google.com/", "https://www.google.com/search?q=udm%3D50",
+                     "https://www.google.com/search?udm=2&q=x", "https://www.bing.com/search?udm=50"] {
+            let url = try #require(URL(string: page))
+            #expect(BuiltInAppRules.domainRule(for: url)?.completionsEnabled == false, "\(page)")
+        }
+    }
+}
