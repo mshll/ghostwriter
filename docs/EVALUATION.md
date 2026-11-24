@@ -43,12 +43,18 @@ Larger sets contain text from the web, so they are not in git. Build them into `
 
 ## Your own writing
 
-The sets above are public text, and by default `gw-eval` builds prompts without the examples of your writing and the word preferences the app adds. To measure those on what you write, build a set from a copy of your own database:
+The sets above are public text, and by default `gw-eval` builds prompts without the examples of your writing and the word preferences the app adds. To measure those on what you write, build a set from a copy of your own database. The database is encrypted, so make a plaintext copy with the `sqlcipher` shell (`brew install sqlcipher`) and the key from your keychain. macOS asks you to allow access to the key.
 
 ```sh
-sqlite3 "file:$HOME/Library/Application Support/com.mshl.ghostwriter/ghostwriter.sqlite?mode=ro" \
-    ".backup '$TMPDIR/ghostwriter-copy.sqlite'"
+key=$(security find-generic-password -s com.mshl.ghostwriter -a database -w)
+sqlcipher "$HOME/Library/Application Support/com.mshl.ghostwriter/ghostwriter.sqlite" <<SQL
+PRAGMA key = "x'$key'";
+ATTACH DATABASE '$TMPDIR/ghostwriter-copy.sqlite' AS plaintext KEY '';
+SELECT sqlcipher_export('plaintext');
+DETACH DATABASE plaintext;
+SQL
 uv run --script eval/scripts/build_history_set.py "$TMPDIR/ghostwriter-copy.sqlite" --kind <bundle id>=aiPrompt
+rm "$TMPDIR/ghostwriter-copy.sqlite"
 ```
 
 The script splits your recorded writing by date. The older sessions become `history.jsonl`, the newer ones `test.jsonl`, with rows cut at word boundaries. It drops test sessions that repeat a history session. The database does not store field kinds, so `--kind` sets them per app. Both files hold your writing. They go to `eval/private/history/`, which git ignores. Keep them on your Mac.

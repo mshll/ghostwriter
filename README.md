@@ -40,7 +40,7 @@ Your words never leave this Mac.
 - It connects to the internet for two things only: model downloads from Hugging Face and update checks.
 - It never reads or records text from secure fields, payment card and one-time code fields, password managers or apps you exclude. It never records what you type in a terminal.
 - While suggestions are off everywhere, it records nothing, unloads its model and reads text only for a shortcut you press.
-- Recorded writing, snippets and statistics are in one database file on your Mac. Settings > Privacy & Data shows it, and you can erase it there.
+- Recorded writing, snippets and statistics are in one database file on your Mac, encrypted with AES-256 ([SQLCipher](https://www.zetetic.net/sqlcipher/)). The key is a random one in your login keychain, made on first launch. Settings > Privacy & Data shows the file, and you can erase it there.
 - Screenshots for text recognition (optional) stay in memory and are discarded at once.
 
 ## Install
@@ -146,6 +146,7 @@ Quit Ghostwriter from the menu bar and move it to the Trash. To remove its data 
 ```sh
 rm -rf ~/Library/Application\ Support/com.mshl.ghostwriter
 defaults delete com.mshl.ghostwriter
+security delete-generic-password -s com.mshl.ghostwriter -a database
 ```
 
 With Homebrew: `brew uninstall --zap --cask ghostwriter`.
@@ -172,6 +173,7 @@ Bug reports, ideas and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIB
 
 - [llama.cpp](https://github.com/ggml-org/llama.cpp) runs the models.
 - [GRDB](https://github.com/groue/GRDB.swift) stores your writing, snippets and statistics.
+- [SQLCipher](https://www.zetetic.net/sqlcipher/) encrypts the database. Copyright (c) 2025, ZETETIC LLC, under the [SQLCipher Community Edition license](https://github.com/sqlcipher/SQLCipher.swift/blob/master/LICENSE.md).
 - [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) records the global shortcuts.
 - [Sparkle](https://sparkle-project.org) installs updates.
 - Model files come from [Google's Gemma](https://ai.google.dev/gemma) family, quantized by [mradermacher](https://huggingface.co/mradermacher).
