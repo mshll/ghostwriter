@@ -26,7 +26,8 @@ let package = Package(
         .executable(name: "gw-ctxprobe", targets: ["gw-ctxprobe"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
+        .package(path: "../GRDBCipher"),
+        .package(url: "https://github.com/sqlcipher/SQLCipher.swift.git", from: "4.20.0"),
     ],
     targets: [
         .binaryTarget(
@@ -45,7 +46,7 @@ let package = Package(
         .target(name: "Prompting", dependencies: ["GWCore"], swiftSettings: swift6),
         .target(
             name: "Memory",
-            dependencies: ["GWCore", .product(name: "GRDB", package: "GRDB.swift")],
+            dependencies: ["GWCore", .product(name: "GRDB", package: "GRDBCipher")],
             swiftSettings: swift6
         ),
         .target(name: "Capture", dependencies: ["GWCore"], swiftSettings: swift6),
@@ -58,7 +59,7 @@ let package = Package(
             name: "CotypistImport",
             dependencies: [
                 "GWCore", "Memory", "Prompting",
-                .product(name: "GRDB", package: "GRDB.swift"), .product(name: "GRDBSQLite", package: "GRDB.swift"),
+                .product(name: "GRDB", package: "GRDBCipher"), .product(name: "SQLCipher", package: "SQLCipher.swift"),
             ],
             swiftSettings: swift6
         ),
@@ -81,7 +82,7 @@ let package = Package(
         .testTarget(name: "ScreenContextTests", dependencies: ["ScreenContext"], swiftSettings: swift6),
         .testTarget(
             name: "CotypistImportTests",
-            dependencies: ["CotypistImport", "Memory", .product(name: "GRDB", package: "GRDB.swift")],
+            dependencies: ["CotypistImport", "Memory", .product(name: "GRDB", package: "GRDBCipher")],
             swiftSettings: swift6
         ),
         .testTarget(name: "EvalTests", dependencies: ["gw-eval", "Memory"], swiftSettings: swift6),
