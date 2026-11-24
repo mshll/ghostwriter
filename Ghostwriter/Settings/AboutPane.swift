@@ -42,7 +42,7 @@ struct AboutPane: View {
             }
 
             Section {
-                Text("Built with llama.cpp, GRDB, KeyboardShortcuts and Sparkle. Gemma models are provided under the Gemma Terms of Use.")
+                Text("Built with llama.cpp, GRDB, SQLCipher, KeyboardShortcuts and Sparkle. Gemma models are provided under the Gemma Terms of Use.")
                     .foregroundStyle(.secondary)
                     .settingsSearchTarget(AboutSetting.acknowledgments)
                 if let gemmaTerms = Self.gemmaTerms {

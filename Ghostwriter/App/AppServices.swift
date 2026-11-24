@@ -50,7 +50,7 @@ final class AppServices {
     private static func openMemory(appState: AppState) -> MemoryStore? {
         do {
             try FileManager.default.createDirectory(at: AppPaths.support, withIntermediateDirectories: true)
-            return try MemoryStore(url: AppPaths.database)
+            return try MemoryStore(url: AppPaths.database, keys: KeychainKeyStore(service: AppPaths.bundleID, account: "database"))
         } catch {
             log.error("Opening the database failed: \(error.localizedDescription, privacy: .public)")
             appState.databaseError = error.localizedDescription

@@ -29,7 +29,7 @@ xcodebuild -project Ghostwriter.xcodeproj -scheme Ghostwriter -configuration Deb
 
 Ghostwriter needs Accessibility permission. macOS ties that permission to the app's signature:
 
-- **Ad hoc** (the command above): needs no Apple account. macOS asks for Accessibility again after each build. Remove the old entry in System Settings > Privacy & Security > Accessibility if the new build does not get the permission.
+- **Ad hoc** (the command above): needs no Apple account. macOS asks for Accessibility again after each build. Remove the old entry in System Settings > Privacy & Security > Accessibility if the new build does not get the permission. Each new build also asks for access to the database key in the keychain.
 - **Your Developer ID:** set `DEVELOPMENT_TEAM` in `project.yml` to your team ID. The permission then survives rebuilds. Do not commit this change.
 
 The app is not sandboxed. Accessibility and synthetic key events do not work in the sandbox.
@@ -55,7 +55,8 @@ swift test --package-path Packages/GhostwriterKit
 | `Packages/GhostwriterKit/Sources/GWCore` | Shared value types, paths, logging, `EventMarker` |
 | `…/Inference` | llama.cpp wrapper, completion engine (beam search, KV cache reuse), model catalog, downloads |
 | `…/Prompting` | Prompt builder, section budgets, language and field-kind detection |
-| `…/Memory` | SQLite store (GRDB): recorded writing with full-text retrieval, statistics, snippets, app rules |
+| `…/Memory` | Encrypted SQLite store (GRDB, SQLCipher): recorded writing with full-text retrieval, statistics, snippets, app rules |
+| `Packages/GRDBCipher` | GRDB built against SQLCipher. Its `Package.swift` says how to update it. |
 | `…/Capture` | Accessibility focus tracking, text around the caret, caret position and font |
 | `…/Input` | Key monitoring, global shortcuts, text insertion |
 | `…/Overlay` | The ghost-text panel, multi-line drafts, the picker |

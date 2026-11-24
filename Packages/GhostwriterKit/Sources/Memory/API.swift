@@ -77,4 +77,6 @@ public enum SuggestionOutcome: Sendable {
 
 public enum MemoryError: Error, Equatable {
     case duplicateSnippetTrigger(String)
+    /// The encrypted copy of a plaintext database had different row counts.
+    case encryptionLostRows
 }

@@ -1,9 +1,9 @@
 import Foundation
 import GRDB
-import GRDBSQLite
 import GWCore
 import Memory
 import Prompting
+import SQLCipher
 import os
 
 /// Reads writing history and per-app settings from a decrypted Cotypist database.

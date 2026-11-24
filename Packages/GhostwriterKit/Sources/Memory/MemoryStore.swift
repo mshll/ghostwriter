@@ -36,9 +36,10 @@ public final class MemoryStore: Sendable {
     let calendar: Calendar
     let state = Mutex(State())
 
-    public convenience init(url: URL) throws {
+    /// Opens the database at `url`, encrypted with a key from `keys`.
+    public convenience init(url: URL, keys: any DatabaseKeyStore) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try self.init(writer: DatabasePool(path: url.path(percentEncoded: false), configuration: Self.configuration))
+        try self.init(writer: DatabaseFile.open(url, keys: keys))
     }
 
     init(
@@ -57,13 +58,14 @@ public final class MemoryStore: Sendable {
     }
 
     static func inMemory(retention: Retention, calendar: Calendar = .autoupdatingCurrent) throws -> MemoryStore {
-        try MemoryStore(writer: DatabaseQueue(configuration: configuration), retention: retention, calendar: calendar)
+        try MemoryStore(writer: DatabaseQueue(configuration: configuration(key: nil)), retention: retention, calendar: calendar)
     }
 
     /// Deleted rows are overwritten with zeros, so erased writing does not linger in free pages.
-    static var configuration: Configuration {
+    static func configuration(key: Data?) -> Configuration {
         var configuration = Configuration()
         configuration.prepareDatabase { db in
+            if let key { try db.usePassphrase(DatabaseFile.passphrase(key)) }
             try db.execute(sql: "PRAGMA secure_delete = ON")
         }
         return configuration

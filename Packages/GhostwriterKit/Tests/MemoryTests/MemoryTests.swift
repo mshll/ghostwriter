@@ -77,7 +77,8 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
                 return try Data(contentsOf: file).range(of: Data(word.utf8)) != nil
             }
         }
-        let store = try MemoryStore(url: url)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let store = try MemoryStore(writer: DatabasePool(path: url.path(percentEncoded: false), configuration: MemoryStore.configuration(key: nil)))
         try store.upsertSession(session("private", topics[0] + " The zygomorphicquokka plan stays private.", app: "com.apple.Notes"))
         for (index, text) in topics.enumerated() { try store.upsertSession(session("t\(index)", text)) }
         #expect(try contains("zygomorphicquokka"))
@@ -93,8 +94,9 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
             do { try FileManager.default.removeItem(at: folder) } catch { Issue.record(error) }
         }
         let url = folder.appending(path: "nested/store.sqlite")
-        try MemoryStore(url: url).upsertSession(session("a", topics[0]))
-        #expect(try MemoryStore(url: url).writingCount(bundleID: nil) == 1)
+        let keys = TestKeyStore()
+        try MemoryStore(url: url, keys: keys).upsertSession(session("a", topics[0]))
+        #expect(try MemoryStore(url: url, keys: keys).writingCount(bundleID: nil) == 1)
     }
 
     @Test func importAddsNewSessionsAndKeepsExistingOnes() throws {
@@ -332,7 +334,7 @@ func session(_ key: String, _ text: String, app: String = "com.apple.mail", lang
     }
 
     @Test func upgradingIndexesCharacterPairsOfEarlierWriting() throws {
-        let queue = try DatabaseQueue(configuration: MemoryStore.configuration)
+        let queue = try DatabaseQueue(configuration: MemoryStore.configuration(key: nil))
         try Schema.migrator.migrate(queue, upTo: "v1")
         try queue.write { db in
             try db.execute(
